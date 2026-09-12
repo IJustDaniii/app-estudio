@@ -20,6 +20,10 @@ Antes de ejecutar el seed, sustituye `DEMO_USER_EMAIL` y `DEMO_USER_PASSWORD` en
 
 `AUTH_TRUST_HOST=true` permite a Auth.js confiar en el host servido por Next.js. En producción, mantén esta opción únicamente detrás de un proxy que valide el encabezado `Host`.
 
+### Arranque sencillo en Windows
+
+Con Docker Desktop instalado y `.env` configurado, haz doble clic en `iniciar-aula.bat` desde la carpeta del proyecto. El script prepara el `PATH`, abre Docker Desktop si está cerrado, espera a PostgreSQL, ejecuta Prisma y deja Next.js ejecutándose. Desde PowerShell también puedes usar `npm run start:local`.
+
 ## Comprobaciones
 
 ```bash

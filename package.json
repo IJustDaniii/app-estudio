@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
+    "start:local": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/start-dev.ps1",
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
