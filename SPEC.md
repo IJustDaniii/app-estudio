@@ -7,7 +7,7 @@ PWA instalable de organización académica gamificada para un estudiante de 1.º
 ## Alcance funcional
 
 - Cuenta local con contraseña segura y sesión persistente mediante Auth.js.
-- CRUD básico de asignaturas, horario, tareas, Bosses, notas y objetivos.
+- Gestión básica de asignaturas, horario, tareas, Bosses, notas y objetivos; el horario permite modificar sus franjas.
 - Calendario mensual derivado de tareas, Bosses y objetivos con fecha.
 - Temporizador de estudio con registro de sesiones.
 - Dashboard centrado en hoy y planificador “¿Qué hago ahora?” basado en una heurística visible.
@@ -66,4 +66,3 @@ Vitest para reglas de planificación y progreso. El cierre exige test, lint, typ
 - Reglas de redistribución automática para estudio flexible.
 - Catálogo definitivo de tipos, prioridades y dificultad.
 - Política de despliegue, recuperación de contraseña y verificación de email.
-

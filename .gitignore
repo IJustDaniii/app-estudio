@@ -8,5 +8,5 @@ src/generated/prisma/
 *.pem
 *.key
 npm-debug.log*
+*.tsbuildinfo
 .DS_Store
-

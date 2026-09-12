@@ -20,7 +20,11 @@ export type PlannerRecommendation = {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function daysUntil(date: Date, now: Date) {
-  return Math.ceil((date.getTime() - now.getTime()) / DAY_MS);
+  const targetDay = new Date(date);
+  const currentDay = new Date(now);
+  targetDay.setHours(0, 0, 0, 0);
+  currentDay.setHours(0, 0, 0, 0);
+  return Math.round((targetDay.getTime() - currentDay.getTime()) / DAY_MS);
 }
 
 function scoreTask(task: PlannerTask, now: Date): PlannerRecommendation {
@@ -41,7 +45,7 @@ function scoreTask(task: PlannerTask, now: Date): PlannerRecommendation {
     } else if (days <= 3) {
       score += PLANNER_WEIGHTS.dueWithinThreeDays;
       reasons.push(`Vence en ${days} días`);
-    } else if (days <= 7) {
+    } else if (days >= 0 && days <= 7) {
       score += PLANNER_WEIGHTS.dueWithinSevenDays;
       reasons.push("Vence esta semana");
     }
@@ -52,7 +56,7 @@ function scoreTask(task: PlannerTask, now: Date): PlannerRecommendation {
     if (days >= 0 && days <= 3) {
       score += PLANNER_WEIGHTS.bossWithinThreeDays;
       reasons.push("Prepara un Boss en los próximos 3 días");
-    } else if (days <= 7) {
+    } else if (days >= 0 && days <= 7) {
       score += PLANNER_WEIGHTS.bossWithinSevenDays;
       reasons.push("Prepara un Boss esta semana");
     }
@@ -83,4 +87,3 @@ export function recommendNextTask(
     })
     .sort((a, b) => b.score - a.score || a.task.estimatedMinutes - b.task.estimatedMinutes)[0];
 }
-

@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { credentialsSchema } from "@/lib/validation";
 import { allowLoginAttempt, clearLoginAttempts } from "@/lib/security/rate-limit";
@@ -37,7 +38,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
 export async function requireUserId() {
   const session = await auth();
-  if (!session?.user?.id) throw new Error("UNAUTHORIZED");
+  if (!session?.user?.id) redirect("/login");
   return session.user.id;
 }
-

@@ -57,4 +57,47 @@ describe("recommendNextTask", () => {
 
     expect(recommendNextTask(tasks, now, 30)?.task.id).toBe("short");
   });
+
+  it("trata una fecha límite del día actual como hoy durante todo el día", () => {
+    const recommendation = recommendNextTask(
+      [
+        {
+          id: "today",
+          title: "Entrega de hoy",
+          planningMode: "FIXED_DEADLINE",
+          priority: "MEDIUM",
+          difficulty: 2,
+          dueDate: new Date("2026-09-12T00:00:00.000Z"),
+          estimatedMinutes: 30,
+          relatedBossDate: null,
+        },
+      ],
+      now,
+      30,
+    );
+
+    expect(recommendation?.reasons).toContain("Vence hoy");
+    expect(recommendation?.reasons).not.toContain("La fecha límite ya ha pasado");
+  });
+
+  it("ignora un Boss que ya ha pasado", () => {
+    const recommendation = recommendNextTask(
+      [
+        {
+          id: "past-boss",
+          title: "Repaso",
+          planningMode: "FLEXIBLE_STUDY",
+          priority: "LOW",
+          difficulty: 1,
+          dueDate: null,
+          estimatedMinutes: 20,
+          relatedBossDate: new Date("2026-09-10T12:00:00.000Z"),
+        },
+      ],
+      now,
+      30,
+    );
+
+    expect(recommendation?.reasons.every((reason) => !reason.includes("Boss"))).toBe(true);
+  });
 });

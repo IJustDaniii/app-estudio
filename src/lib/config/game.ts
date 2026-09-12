@@ -8,6 +8,7 @@ export const GAME_RULES = {
   coinsPerStudyBlockMinutes: 10,
   taskCompletionXp: 20,
   taskCompletionCoins: 2,
+  dailyStudyTargetMinutes: 60,
   dailyMissions: [
     { title: "Estudia 30 minutos", metric: "STUDY_MINUTES", target: 30, rewardXp: 20, rewardCoins: 3 },
     { title: "Completa 2 tareas", metric: "TASKS_COMPLETED", target: 2, rewardXp: 20, rewardCoins: 3 },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { registerSchema, taskSchema } from "@/lib/validation";
+import { goalProgressSchema, registerSchema, studySessionSchema, taskSchema } from "@/lib/validation";
 
 describe("validación de cuenta", () => {
   it("exige una contraseña suficientemente robusta", () => {
@@ -13,6 +13,23 @@ describe("validación de cuenta", () => {
         password: "Segura-123",
       }).success,
     ).toBe(true);
+  });
+});
+
+describe("validación de progreso y estudio", () => {
+  it("rechaza progreso no numérico", () => {
+    expect(goalProgressSchema.safeParse({ id: "cm12345678901234567890123", progress: "" }).success).toBe(false);
+  });
+
+  it("rechaza una duración imposible para el intervalo registrado", () => {
+    expect(studySessionSchema.safeParse({
+      startedAt: "2026-09-12T10:00:00.000Z",
+      endedAt: "2026-09-12T10:05:00.000Z",
+      plannedMinutes: "25",
+      actualMinutes: "30",
+      subjectId: "",
+      taskId: "",
+    }).success).toBe(false);
   });
 });
 

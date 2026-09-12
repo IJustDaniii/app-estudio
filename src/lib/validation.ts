@@ -44,7 +44,7 @@ export const taskSchema = z
     difficulty: z.coerce.number().int().min(1).max(5),
     dueDate: emptyToNullDate,
     estimatedMinutes: z.coerce.number().int().min(5).max(600),
-    status: z.enum(["PENDING", "IN_PROGRESS", "COMPLETED"]),
+    status: z.enum(["PENDING", "IN_PROGRESS", "COMPLETED"]).default("PENDING"),
     notes: z.string().trim().max(2000).optional().transform((value) => value || null),
     subjectId: optionalId,
   })
@@ -78,11 +78,28 @@ export const goalSchema = z.object({
   progress: z.coerce.number().int().min(0).max(100),
 });
 
-export const studySessionSchema = z.object({
-  startedAt: z.coerce.date(),
-  endedAt: z.coerce.date(),
-  plannedMinutes: z.coerce.number().int().min(1).max(600),
-  actualMinutes: z.coerce.number().int().min(1).max(720),
-  subjectId: optionalId,
-  taskId: optionalId,
+export const goalProgressSchema = z.object({
+  id: z.string().cuid(),
+  progress: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.coerce.number().int().min(0).max(100),
+  ),
 });
+
+export const studySessionSchema = z
+  .object({
+    startedAt: z.coerce.date(),
+    endedAt: z.coerce.date(),
+    plannedMinutes: z.coerce.number().int().min(1).max(600),
+    actualMinutes: z.coerce.number().int().min(1).max(720),
+    subjectId: optionalId,
+    taskId: optionalId,
+  })
+  .refine((data) => data.endedAt >= data.startedAt, {
+    message: "La sesión no puede terminar antes de empezar",
+    path: ["endedAt"],
+  })
+  .refine(
+    (data) => data.actualMinutes * 60_000 <= data.endedAt.getTime() - data.startedAt.getTime() + 59_999,
+    { message: "La duración registrada supera el tiempo transcurrido", path: ["actualMinutes"] },
+  );

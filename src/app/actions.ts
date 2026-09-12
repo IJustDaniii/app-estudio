@@ -8,10 +8,12 @@ import { signIn, signOut, requireUserId } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { DEMO_SUBJECTS } from "@/lib/demo-subjects";
 import { GAME_RULES } from "@/lib/config/game";
+import { dateOnlyForLocalDay, localDayBounds } from "@/lib/domain/dates";
 import { rewardsForStudyMinutes } from "@/lib/domain/progress";
 import {
   bossSchema,
   goalSchema,
+  goalProgressSchema,
   gradeSchema,
   registerSchema,
   studySessionSchema,
@@ -24,12 +26,6 @@ export type AuthFormState = { error?: string } | undefined;
 
 function formObject(formData: FormData) {
   return Object.fromEntries(formData.entries());
-}
-
-function startOfToday() {
-  const date = new Date();
-  date.setHours(0, 0, 0, 0);
-  return date;
 }
 
 async function ensureOwnedSubject(userId: string, subjectId: string | null) {
@@ -89,6 +85,15 @@ export async function createTimetableEntry(formData: FormData) {
   const data = timetableSchema.parse(formObject(formData));
   await ensureOwnedSubject(userId, data.subjectId);
   await prisma.timetableEntry.create({ data: { ...data, userId } });
+  revalidatePath("/app/timetable");
+}
+
+export async function updateTimetableEntry(formData: FormData) {
+  const userId = await requireUserId();
+  const id = String(formData.get("id") ?? "");
+  const data = timetableSchema.parse(formObject(formData));
+  await ensureOwnedSubject(userId, data.subjectId);
+  await prisma.timetableEntry.updateMany({ where: { id, userId }, data });
   revalidatePath("/app/timetable");
 }
 
@@ -162,8 +167,7 @@ export async function createGoal(formData: FormData) {
 
 export async function updateGoal(formData: FormData) {
   const userId = await requireUserId();
-  const id = String(formData.get("id") ?? "");
-  const progress = Math.max(0, Math.min(100, Number(formData.get("progress"))));
+  const { id, progress } = goalProgressSchema.parse(formObject(formData));
   await prisma.goal.updateMany({ where: { id, userId }, data: { progress, isComplete: progress === 100 } });
   revalidatePath("/app/goals");
 }
@@ -190,15 +194,14 @@ export async function recordStudySession(formData: FormData) {
 }
 
 export async function refreshDailyMissions(userId: string) {
-  const start = startOfToday();
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
+  const { start, end } = localDayBounds();
+  const missionDate = dateOnlyForLocalDay(start);
   await prisma.$transaction(
     GAME_RULES.dailyMissions.map((mission) =>
       prisma.mission.upsert({
-        where: { userId_date_metric: { userId, date: start, metric: mission.metric } },
+        where: { userId_date_metric: { userId, date: missionDate, metric: mission.metric } },
         update: {},
-        create: { ...mission, userId, date: start },
+        create: { ...mission, userId, date: missionDate },
       }),
     ),
   );
@@ -207,7 +210,7 @@ export async function refreshDailyMissions(userId: string) {
     prisma.task.count({ where: { userId, completedAt: { gte: start, lt: end } } }),
   ]);
   await Promise.all([
-    prisma.mission.updateMany({ where: { userId, date: start, metric: "STUDY_MINUTES" }, data: { progress: minutes._sum.actualMinutes ?? 0, isComplete: (minutes._sum.actualMinutes ?? 0) >= GAME_RULES.dailyMissions[0].target } }),
-    prisma.mission.updateMany({ where: { userId, date: start, metric: "TASKS_COMPLETED" }, data: { progress: completed, isComplete: completed >= GAME_RULES.dailyMissions[1].target } }),
+    prisma.mission.updateMany({ where: { userId, date: missionDate, metric: "STUDY_MINUTES" }, data: { progress: minutes._sum.actualMinutes ?? 0, isComplete: (minutes._sum.actualMinutes ?? 0) >= GAME_RULES.dailyMissions[0].target } }),
+    prisma.mission.updateMany({ where: { userId, date: missionDate, metric: "TASKS_COMPLETED" }, data: { progress: completed, isComplete: completed >= GAME_RULES.dailyMissions[1].target } }),
   ]);
 }
