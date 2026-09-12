@@ -71,11 +71,11 @@ if ($LASTEXITCODE -ne 0) { Stop-WithMessage "No se pudo iniciar PostgreSQL con D
 Write-Host "Esperando a que PostgreSQL acepte conexiones..." -ForegroundColor Cyan
 $databaseReady = $false
 for ($attempt = 1; $attempt -le 30; $attempt++) {
-  & docker.exe compose exec -T db pg_isready -U postgres -d aula_1b *> $null
+  & docker.exe compose exec -T database pg_isready -U postgres -d aula_1b *> $null
   if ($LASTEXITCODE -eq 0) { $databaseReady = $true; break }
   Start-Sleep -Seconds 2
 }
-if (-not $databaseReady) { Stop-WithMessage "PostgreSQL no ha respondido a tiempo. Ejecuta 'docker compose logs db' para ver el motivo." }
+if (-not $databaseReady) { Stop-WithMessage "PostgreSQL no ha respondido a tiempo. Ejecuta 'docker compose logs database' para ver el motivo." }
 
 Write-Host "Preparando Prisma y datos demo..." -ForegroundColor Cyan
 & npm.cmd run db:generate
