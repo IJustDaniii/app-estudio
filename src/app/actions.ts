@@ -20,6 +20,7 @@ import {
   subjectSchema,
   taskSchema,
   timetableSchema,
+  topicSchema,
 } from "@/lib/validation";
 
 export type AuthFormState = { error?: string } | undefined;
@@ -78,6 +79,14 @@ export async function deleteSubject(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   await prisma.subject.deleteMany({ where: { id, userId } });
   revalidatePath("/app");
+}
+
+export async function createTopic(formData: FormData) {
+  const userId = await requireUserId();
+  const data = topicSchema.parse(formObject(formData));
+  await ensureOwnedSubject(userId, data.subjectId);
+  await prisma.topic.create({ data: { ...data, userId } });
+  revalidatePath("/app/subjects");
 }
 
 export async function createTimetableEntry(formData: FormData) {

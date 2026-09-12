@@ -3,6 +3,7 @@ import { z } from "zod";
 const emptyToNullDate = z.preprocess((value) => (value === "" ? null : value), z.coerce.date().nullable());
 const optionalId = z.preprocess((value) => (value === "" ? null : value), z.string().cuid().nullable());
 const requiredText = (max: number) => z.string().trim().min(1).max(max);
+const formBoolean = z.preprocess((value) => value === true || value === "true" || value === "on", z.boolean());
 
 export const credentialsSchema = z.object({
   email: z.string().trim().email().max(254).transform((value) => value.toLowerCase()),
@@ -24,6 +25,31 @@ export const subjectSchema = z.object({
   name: requiredText(80),
   color: z.enum(["slate", "blue", "green", "amber", "rose", "violet", "cyan", "orange"]),
 });
+
+export const topicSchema = z.object({
+  name: requiredText(120),
+  subjectId: z.string().cuid(),
+});
+
+export const materialMetadataSchema = z.object({
+  name: requiredText(160),
+  description: z.string().trim().max(2_000).optional().transform((value) => value || null),
+  type: z.enum(["NOTES", "EXERCISES", "EXAM", "SOLUTIONS", "THEORY", "RUBRIC", "PROJECT", "OTHER"]),
+  subjectId: optionalId,
+  topicId: optionalId,
+  taskId: optionalId,
+  bossId: optionalId,
+  isFavorite: formBoolean,
+  isCompletedExam: formBoolean,
+});
+
+export const materialUploadMetadataSchema = materialMetadataSchema.omit({ name: true }).extend({
+  type: z.enum(["NOTES", "EXERCISES", "EXAM", "SOLUTIONS", "THEORY", "RUBRIC", "PROJECT", "OTHER"]).default("OTHER"),
+  isFavorite: formBoolean.default(false),
+  isCompletedExam: formBoolean.default(false),
+});
+
+export const materialIdSchema = z.string().cuid();
 
 export const timetableSchema = z
   .object({

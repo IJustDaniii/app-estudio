@@ -17,6 +17,7 @@ const nav = [
   { href: "/app/grades", label: "Notas", icon: GraduationCap },
   { href: "/app/goals", label: "Objetivos", icon: Goal },
   { href: "/app/study", label: "Estudiar", icon: BookOpen },
+  { href: "/app/materials", label: "Materiales", icon: LibraryBig },
   { href: "/app/statistics", label: "Estadísticas", icon: ChartNoAxesCombined },
   { href: "/app/subjects", label: "Asignaturas", icon: LibraryBig },
 ] as const;

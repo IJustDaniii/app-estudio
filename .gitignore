@@ -1,6 +1,7 @@
 node_modules/
 .next/
 coverage/
+storage/
 src/generated/prisma/
 .env
 .env.local
