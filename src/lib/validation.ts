@@ -1,0 +1,88 @@
+import { z } from "zod";
+
+const emptyToNullDate = z.preprocess((value) => (value === "" ? null : value), z.coerce.date().nullable());
+const optionalId = z.preprocess((value) => (value === "" ? null : value), z.string().cuid().nullable());
+const requiredText = (max: number) => z.string().trim().min(1).max(max);
+
+export const credentialsSchema = z.object({
+  email: z.string().trim().email().max(254).transform((value) => value.toLowerCase()),
+  password: z.string().min(8).max(72),
+});
+
+export const registerSchema = credentialsSchema.extend({
+  name: z.string().trim().min(2).max(80),
+  password: z
+    .string()
+    .min(8)
+    .max(72)
+    .regex(/[A-Za-z]/, "Incluye una letra")
+    .regex(/[0-9]/, "Incluye un número")
+    .regex(/[^A-Za-z0-9]/, "Incluye un símbolo"),
+});
+
+export const subjectSchema = z.object({
+  name: requiredText(80),
+  color: z.enum(["slate", "blue", "green", "amber", "rose", "violet", "cyan", "orange"]),
+});
+
+export const timetableSchema = z
+  .object({
+    subjectId: z.string().cuid(),
+    dayOfWeek: z.coerce.number().int().min(1).max(5),
+    startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+    endTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+    room: z.string().trim().max(40).optional().transform((value) => value || null),
+  })
+  .refine((data) => data.endTime > data.startTime, { message: "La hora de fin debe ser posterior" });
+
+export const taskSchema = z
+  .object({
+    title: requiredText(160),
+    planningMode: z.enum(["FIXED_DEADLINE", "FLEXIBLE_STUDY"]),
+    type: requiredText(60),
+    priority: z.enum(["LOW", "MEDIUM", "HIGH"]),
+    difficulty: z.coerce.number().int().min(1).max(5),
+    dueDate: emptyToNullDate,
+    estimatedMinutes: z.coerce.number().int().min(5).max(600),
+    status: z.enum(["PENDING", "IN_PROGRESS", "COMPLETED"]),
+    notes: z.string().trim().max(2000).optional().transform((value) => value || null),
+    subjectId: optionalId,
+  })
+  .refine((data) => data.planningMode !== "FIXED_DEADLINE" || data.dueDate !== null, {
+    message: "Una obligación necesita una fecha límite real",
+    path: ["dueDate"],
+  });
+
+export const bossSchema = z.object({
+  title: requiredText(120),
+  subjectId: z.string().cuid(),
+  date: z.coerce.date(),
+  topics: requiredText(1000).transform((value) => value.split("\n").map((item) => item.trim()).filter(Boolean)),
+  difficulty: z.coerce.number().int().min(1).max(5),
+  preparation: z.coerce.number().int().min(0).max(100),
+  targetGrade: z.preprocess((value) => (value === "" ? null : value), z.coerce.number().min(0).max(10).nullable()),
+  expectedGrade: z.preprocess((value) => (value === "" ? null : value), z.coerce.number().min(0).max(10).nullable()),
+  actualGrade: z.preprocess((value) => (value === "" ? null : value), z.coerce.number().min(0).max(10).nullable()),
+});
+
+export const gradeSchema = z.object({
+  label: requiredText(100),
+  subjectId: z.string().cuid(),
+  value: z.coerce.number().min(0).max(10),
+  date: z.coerce.date(),
+});
+
+export const goalSchema = z.object({
+  title: requiredText(160),
+  targetDate: emptyToNullDate,
+  progress: z.coerce.number().int().min(0).max(100),
+});
+
+export const studySessionSchema = z.object({
+  startedAt: z.coerce.date(),
+  endedAt: z.coerce.date(),
+  plannedMinutes: z.coerce.number().int().min(1).max(600),
+  actualMinutes: z.coerce.number().int().min(1).max(720),
+  subjectId: optionalId,
+  taskId: optionalId,
+});
