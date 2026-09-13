@@ -7,6 +7,7 @@ import { TaskEditor } from "@/components/task-editor";
 import { BossEditor } from "@/components/boss-editor";
 import { GradeCalculator } from "@/components/grade-calculator";
 import { GradeEditor } from "@/components/grade-editor";
+import { GoalEditor } from "@/components/goal-editor";
 
 describe("interfaz del nucleo academico", () => {
   it("renderiza un icono del catalogo sin insertar texto como marcado", () => {
@@ -60,5 +61,18 @@ describe("interfaz del nucleo academico", () => {
     expect(editor).toContain("2");
     expect(calculator).toMatch(/nota necesaria/i);
     expect(calculator).toContain("peso de la próxima nota");
+  });
+
+  it("clasifica objetivos y permite editar todos sus datos", () => {
+    const markup = renderToStaticMarkup(createElement(GoalEditor, {
+      action: () => undefined,
+      goal: { id: "cm12345678901234567890123", title: "Aprobar historia", category: "ACADEMIC", subjectId: "cm12345678901234567890124", targetDate: new Date("2026-12-20"), progress: 40 },
+      subjects: [{ id: "cm12345678901234567890124", name: "Historia" }],
+    }));
+    expect(markup).toContain("Académico");
+    expect(markup).toContain("Personal");
+    expect(markup).toContain("name=\"subjectId\"");
+    expect(markup).toContain("name=\"progress\"");
+    expect(markup).toContain("value=\"40\"");
   });
 });
