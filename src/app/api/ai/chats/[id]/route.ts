@@ -15,6 +15,15 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   if (!userId) return aiApiError("UNAUTHORIZED", "No autorizado", 401);
   const chat = await ownedChat((await context.params).id, userId);
   if (!chat) return aiApiError("NOT_FOUND", "Chat no encontrado", 404);
+  await prisma.aIMessage.updateMany({
+    where: {
+      chatId: chat.id,
+      userId,
+      status: "PENDING",
+      updatedAt: { lt: new Date(Date.now() - 5 * 60_000) },
+    },
+    data: { status: "ERROR", errorCode: "STALE_RESPONSE" },
+  });
   const messages = await prisma.aIMessage.findMany({ where: { chatId: chat.id, userId }, select: { id: true, role: true, content: true, status: true, model: true, errorCode: true, contextSnapshot: true, createdAt: true }, orderBy: { createdAt: "asc" }, take: 200 });
   return Response.json({ ...chat, messages }, { headers: { "Cache-Control": "private, no-store" } });
 }
@@ -30,7 +39,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const chat = await prisma.aIChat.update({ where: { id }, data, select: { id: true, title: true, createdAt: true, updatedAt: true } });
     return Response.json(chat);
   } catch (error) {
-    if (error instanceof ZodError || (error instanceof Error && error.message === "AI_BODY_TOO_LARGE")) return aiApiError("VALIDATION_ERROR", "El título no es válido", 422);
+    if (error instanceof ZodError || error instanceof SyntaxError || (error instanceof Error && error.message === "AI_BODY_TOO_LARGE")) return aiApiError("VALIDATION_ERROR", "El título no es válido", 422);
     return aiApiError("INTERNAL_ERROR", "No se pudo renombrar el chat", 500);
   }
 }

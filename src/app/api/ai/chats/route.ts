@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     const chat = await prisma.aIChat.create({ data: { userId, title: data.title ?? "Nuevo chat" }, select: { id: true, title: true, createdAt: true, updatedAt: true } });
     return Response.json(chat, { status: 201 });
   } catch (error) {
-    if (error instanceof ZodError || (error instanceof Error && error.message === "AI_BODY_TOO_LARGE")) return aiApiError("VALIDATION_ERROR", "El chat no es válido", 422);
+    if (error instanceof ZodError || error instanceof SyntaxError || (error instanceof Error && error.message === "AI_BODY_TOO_LARGE")) return aiApiError("VALIDATION_ERROR", "El chat no es válido", 422);
     return aiApiError("INTERNAL_ERROR", "No se pudo crear el chat", 500);
   }
 }

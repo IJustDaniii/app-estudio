@@ -11,6 +11,7 @@ El módulo `materials` cubre archivos privados, temas/unidades, asociaciones con
 | study | Temporizador y sesiones de estudio sin distracciones | identity, academics |
 | progress | XP, nivel, monedas, racha, misiones y estadísticas básicas | identity, study, academics |
 | dashboard | Prioridad de hoy y planificador transparente | academics, study, progress |
+| ai | Chat local con Ollama, contexto académico explícito, materiales y herramientas de solo lectura | identity, academics, materials, study |
 
-Orden: `foundation → identity → academics → materials → study → progress → dashboard`.
+Orden: `foundation → identity → academics → materials → study → progress → dashboard → ai`.
 

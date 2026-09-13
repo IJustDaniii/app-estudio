@@ -1,5 +1,22 @@
 # Aula 1B
 
+## IA local (Fase 2)
+
+La sección **IA** usa Ollama a través del backend de Next.js; Ollama nunca se expone directamente al navegador. Para arrancar el proveedor local con el modelo predeterminado:
+
+```bash
+ollama serve
+ollama pull qwen3.5:9b
+```
+
+La URL y el modelo activo se pueden cambiar desde `/app/ai` sin tocar código. La aplicación sigue funcionando si Ollama está apagado o si el modelo aún no está instalado: el chat conserva el mensaje pendiente como error recuperable y muestra el diagnóstico.
+
+El contexto académico se construye de forma explícita desde el selector del chat. Solo se envían las asignaturas, tareas, Bosses, notas, objetivos, sesiones y materiales seleccionados, con el límite de caracteres configurado por usuario. Los materiales PDF, DOCX y PPTX se extraen en el backend; las imágenes se incluyen únicamente cuando el modelo activo declara soporte de visión. No hay embeddings ni búsqueda semántica.
+
+Las herramientas disponibles para el modelo son de solo lectura (asignaturas, tareas, Bosses y notas). La capa de propuestas para futuras acciones de escritura exige confirmación y no ejecuta cambios en esta fase.
+
+Referencias del proveedor: [API de chat de Ollama](https://docs.ollama.com/api/chat), [streaming](https://docs.ollama.com/capabilities/streaming), [visión](https://docs.ollama.com/capabilities/vision) y [detalles de modelos](https://docs.ollama.com/api-reference/show-model-details).
+
 ## Materiales y archivos académicos
 
 El módulo Materiales admite PDF, JPG/JPEG, PNG, GIF, WebP, DOC/DOCX y PPT/PPTX. Cada archivo está limitado a 50 MB; una petición puede contener como máximo 20 archivos y 200 MB en total (`MATERIALS_MAX_FILES` y `MATERIALS_MAX_BATCH_SIZE`). El servidor valida extensión, MIME declarado y firma/contenido básico antes de guardar.
@@ -12,9 +29,9 @@ La biblioteca muestra 50 materiales por página y limita a 100 las opciones de a
 
 Antes de interpretar el multipart, el servidor rechaza por `Content-Length` o mediante un stream limitado cualquier cuerpo superior al lote configurado más 2 MB de sobrecarga multipart; el límite de archivos y bytes del lote se sigue validando por separado.
 
-`StorageProvider` es el punto de extensión para Cloudflare R2. La implementación actual es únicamente local; no se han añadido R2, OCR, embeddings ni ninguna función de IA.
+`StorageProvider` es el punto de extensión para Cloudflare R2. La implementación actual es únicamente local; no se han añadido R2, OCR ni embeddings.
 
-PWA de organización académica gamificada para 1.º de Bachillerato. Esta primera versión implementa el núcleo funcional solicitado sin IA, funciones sociales ni mecánicas avanzadas.
+PWA de organización académica gamificada para 1.º de Bachillerato. La infraestructura inicial de IA local se encuentra en la sección IA; siguen fuera de alcance las funciones sociales y las mecánicas avanzadas.
 
 ## Puesta en marcha
 
@@ -68,4 +85,4 @@ Las pautas de implementación siguen la documentación oficial de [PWA en Next.j
 - Recuperación de contraseña, verificación de email y despliegue.
 - Sincronización de datos y mutaciones offline.
 
-No se incluyen mascotas, tienda avanzada, cofres, rangos competitivos, temporadas, IA, Teams, funciones sociales, flashcards ni integraciones externas.
+No se incluyen mascotas, tienda avanzada, cofres, rangos competitivos, temporadas, Teams, funciones sociales, flashcards ni integraciones externas.

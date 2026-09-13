@@ -24,7 +24,7 @@ export async function PATCH(request: Request) {
     });
     return Response.json(settings);
   } catch (error) {
-    if (error instanceof ZodError || (error instanceof Error && error.message === "AI_BODY_TOO_LARGE")) return aiApiError("VALIDATION_ERROR", "La configuración no es válida", 422);
+    if (error instanceof ZodError || error instanceof SyntaxError || (error instanceof Error && error.message === "AI_BODY_TOO_LARGE")) return aiApiError("VALIDATION_ERROR", "La configuración no es válida", 422);
     return aiApiError("INTERNAL_ERROR", "No se pudo guardar la configuración", 500);
   }
 }

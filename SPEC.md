@@ -14,7 +14,14 @@ PWA instalable de organización académica gamificada para un estudiante de 1.º
 - XP, nivel, monedas, racha, misiones diarias y estadísticas básicas.
 - PWA instalable con shell y pantalla offline disponibles sin red.
 
-Fuera de alcance: mascotas, tienda avanzada, cofres, rangos competitivos, temporadas, IA, Teams, funciones sociales, flashcards e integraciones externas.
+Fuera de alcance: mascotas, tienda avanzada, cofres, rangos competitivos, temporadas, Teams, funciones sociales, flashcards e integraciones externas. La IA local inicial queda incluida en la sección siguiente; no incluye las funciones avanzadas listadas fuera de alcance.
+
+### IA local inicial
+
+- Chat persistente por usuario con Ollama en el backend, streaming, ajustes de URL/modelo y estado recuperable cuando el proveedor no está disponible.
+- Constructor de contexto académico explícito y limitado; no se envía la base de datos completa automáticamente.
+- Extracción segura de texto de PDF/DOCX/PPTX, adjuntos de imagen para modelos con visión y selección de materiales existentes.
+- Herramientas iniciales de solo lectura y propuestas futuras de escritura que requieren confirmación.
 
 ## Stack
 
@@ -50,7 +57,7 @@ Vitest para reglas de planificación y progreso. El cierre exige test, lint, typ
 
 - Siempre: validar entradas, comprobar propiedad de recursos, usar Prisma parametrizado y mantener reglas provisionales centralizadas.
 - Pendiente de definición conjunta: fórmulas definitivas, redistribución de estudio, catálogo de recompensas y mecánicas excluidas.
-- Nunca: reprogramar entregas vencidas, tratar obligaciones como flexibles, usar IA o añadir integraciones externas.
+- Nunca: reprogramar entregas vencidas, tratar obligaciones como flexibles, permitir que el modelo escriba directamente en la base de datos o añadir integraciones externas.
 
 ## Criterios de éxito
 
