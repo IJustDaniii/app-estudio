@@ -1,4 +1,5 @@
 import { GAME_RULES } from "@/lib/config/game";
+import { DEFAULT_TIME_ZONE, zonedDateKey } from "@/lib/domain/dates";
 
 export function calculateLevel(totalXp: number) {
   const safeXp = Math.max(0, Math.floor(totalXp));
@@ -17,19 +18,15 @@ export function rewardsForStudyMinutes(minutes: number) {
   };
 }
 
-function dateKey(date: Date) {
-  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
-}
-
-export function calculateStudyStreak(dates: Date[], now = new Date()) {
-  const studied = new Set(dates.map(dateKey));
-  const cursor = new Date(now);
-  cursor.setHours(0, 0, 0, 0);
-  if (!studied.has(dateKey(cursor))) cursor.setDate(cursor.getDate() - 1);
+export function calculateStudyStreak(dates: Date[], now = new Date(), timeZone = DEFAULT_TIME_ZONE) {
+  const studied = new Set(dates.map((date) => zonedDateKey(date, timeZone)));
+  const cursor = new Date(`${zonedDateKey(now, timeZone)}T00:00:00Z`);
+  const key = () => cursor.toISOString().slice(0, 10);
+  if (!studied.has(key())) cursor.setUTCDate(cursor.getUTCDate() - 1);
   let streak = 0;
-  while (studied.has(dateKey(cursor))) {
+  while (studied.has(key())) {
     streak += 1;
-    cursor.setDate(cursor.getDate() - 1);
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
   }
   return streak;
 }

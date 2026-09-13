@@ -21,7 +21,25 @@ export async function apiUserId() {
 export async function parseAIJson<T>(request: Request, schema: z.ZodType<T>) {
   const declared = Number(request.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > MAX_AI_JSON_BODY_BYTES) throw new Error("AI_BODY_TOO_LARGE");
-  const text = await request.text();
-  if (Buffer.byteLength(text) > MAX_AI_JSON_BODY_BYTES) throw new Error("AI_BODY_TOO_LARGE");
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  if (request.body) {
+    const reader = request.body.getReader();
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        totalBytes += value.byteLength;
+        if (totalBytes > MAX_AI_JSON_BODY_BYTES) {
+          await reader.cancel().catch(() => undefined);
+          throw new Error("AI_BODY_TOO_LARGE");
+        }
+        chunks.push(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+  const text = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString("utf8");
   return schema.parse(JSON.parse(text || "{}"));
 }

@@ -2,6 +2,7 @@ import JSZip, { type JSZipObject } from "jszip";
 import { PDFParse } from "pdf-parse";
 
 export const MAX_AI_MATERIAL_BYTES = 10 * 1024 * 1024;
+export const MAX_AI_MATERIAL_PROCESSING_MS = 8_000;
 const MAX_OFFICE_XML_BYTES = 5 * 1024 * 1024;
 const MAX_OFFICE_XML_FILES = 200;
 const MAX_PDF_PAGES = 50;

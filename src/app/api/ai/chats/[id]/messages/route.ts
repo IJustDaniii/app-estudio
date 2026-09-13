@@ -7,7 +7,8 @@ import { aiApiError, aiRateLimitError, apiUserId, parseAIJson } from "@/lib/ai/h
 import { getAIProvider } from "@/lib/ai/providers";
 import { toolDefinitionsForPermissions } from "@/lib/ai/tools";
 import { checkAIRateLimit } from "@/lib/ai/rate-limit";
-import { academicContextRepository, emptyReadOnlyToolRepository, getAISettings, scopedReadOnlyToolRepository } from "@/lib/ai/repository";
+import { DEFAULT_TIME_ZONE } from "@/lib/domain/dates";
+import { academicContextRepository, emptyReadOnlyToolRepository, getAISettings, getUserTimezone, scopedReadOnlyToolRepository } from "@/lib/ai/repository";
 import { chatIdSchema, defaultChatTitle, effectiveContextSelection, sendMessageSchema } from "@/lib/ai/validation";
 import { getStorageProvider } from "@/lib/materials/storage";
 import { prisma } from "@/lib/prisma";
@@ -43,6 +44,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     if (!chat) return aiApiError("NOT_FOUND", "Chat no encontrado", 404);
     if (!settings.isAIEnabled) return aiApiError("AI_DISABLED", "La IA está desactivada en tus ajustes.", 403);
     const contextEnabled = settings.isAcademicContextEnabled && data.usePersonalContext;
+    const timeZone = contextEnabled ? await getUserTimezone(userId) : DEFAULT_TIME_ZONE;
+    const now = new Date();
     const permissions = {
       canReadGrades: settings.canReadGrades,
       canReadTasksAndBosses: settings.canReadTasksAndBosses,
@@ -64,14 +67,17 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         maxItemsPerCategory: settings.maxItemsPerCategory,
         selection,
         permissions,
+        timeZone,
+        now,
         repository: academicContextRepository,
         loadMaterial: (storageKey) => getStorageProvider().get(storageKey),
       }),
     ]);
 
     const plan = selectAcademicContextPlan({ message: data.content, selection: academicContext.selection, permissions });
-    const availableTools = contextEnabled ? toolDefinitionsForPermissions(permissions, plan.categories) : [];
-    const snapshot = { ...academicContext.snapshot, selection: academicContext.selection, warnings: academicContext.warnings } as Prisma.InputJsonValue;
+    const availableTools = contextEnabled ? toolDefinitionsForPermissions(permissions, plan.categories, plan.toolNames) : [];
+    const snapshotData = { ...academicContext.snapshot, selection: academicContext.selection, warnings: academicContext.warnings };
+    const snapshot = snapshotData as Prisma.InputJsonValue;
     const shouldRename = chat.title === "Nuevo chat" && historyDesc.length === 0;
     const [userMessage, assistantMessage] = await prisma.$transaction([
       prisma.aIMessage.create({ data: { chatId, userId, role: "USER", content: data.content, status: "COMPLETE", contextSnapshot: snapshot }, select: { id: true, role: true, content: true, status: true, createdAt: true } }),
@@ -89,8 +95,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       async start(controller) {
         let assistantContent = "";
         const warnings = [...academicContext.warnings];
+        const addWarning = (warning: string) => { if (!warnings.includes(warning)) warnings.push(warning); };
         const send = (event: unknown) => controller.enqueue(encoder.encode(streamLine(event)));
-        send({ type: "meta", userMessage, assistantMessage, context: academicContext.snapshot, warnings });
+        send({ type: "meta", userMessage, assistantMessage, context: snapshotData, warnings });
         try {
           let images = academicContext.images.map((image) => image.base64);
           let supportsTools = false;
@@ -100,12 +107,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
               supportsTools = capabilities.tools;
               if (images.length && !capabilities.vision) {
                 images = imagesForModel(images, false);
-                warnings.push("El modelo activo no admite imágenes; se omitieron en esta respuesta.");
+                addWarning("El modelo activo no admite imágenes; se omitieron en esta respuesta.");
                 send({ type: "warning", warnings });
               }
             } catch {
               images = imagesForModel(images, false);
-              warnings.push("No se pudieron comprobar las capacidades del modelo; se omitieron imágenes y herramientas.");
+              addWarning("No se pudieron comprobar las capacidades del modelo; se omitieron imágenes y herramientas.");
               send({ type: "warning", warnings });
             }
           }
@@ -122,7 +129,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
             images,
             selection: academicContext.selection,
             userId,
-            toolRepository: contextEnabled ? scopedReadOnlyToolRepository(academicContext.selection, permissions, settings.maxItemsPerCategory, academicContext.scopeSubjectIds) : emptyReadOnlyToolRepository,
+            toolRepository: contextEnabled ? scopedReadOnlyToolRepository(academicContext.selection, permissions, settings.maxItemsPerCategory, academicContext.scopeSubjectIds, timeZone, now) : emptyReadOnlyToolRepository,
             signal: generationController.signal,
             allowTools: supportsTools,
             availableTools,
@@ -133,12 +140,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
               send({ type: "delta", content: event.content });
             } else usage = event.usage;
           }
-          const completed = await prisma.aIMessage.update({ where: { id: assistantMessage.id }, data: { content: assistantContent, status: "COMPLETE", inputTokens: usage?.inputTokens, outputTokens: usage?.outputTokens }, select: { id: true, role: true, content: true, status: true, model: true, errorCode: true, contextSnapshot: true, createdAt: true } });
+          const completed = await prisma.aIMessage.update({ where: { id: assistantMessage.id }, data: { content: assistantContent, status: "COMPLETE", inputTokens: usage?.inputTokens, outputTokens: usage?.outputTokens, contextSnapshot: { ...snapshotData, warnings } as Prisma.InputJsonValue }, select: { id: true, role: true, content: true, status: true, model: true, errorCode: true, contextSnapshot: true, createdAt: true } });
           await prisma.aIChat.update({ where: { id: chatId }, data: { updatedAt: new Date() } });
           send({ type: "done", message: completed, warnings });
         } catch (error) {
           const safeError = error instanceof AIProviderError ? error : new AIProviderError("PROVIDER_ERROR", { cause: error });
-          await prisma.aIMessage.update({ where: { id: assistantMessage.id }, data: { content: assistantContent, status: "ERROR", errorCode: safeError.code } }).catch(() => undefined);
+          await prisma.aIMessage.update({ where: { id: assistantMessage.id }, data: { content: assistantContent, status: "ERROR", errorCode: safeError.code, contextSnapshot: { ...snapshotData, warnings } as Prisma.InputJsonValue } }).catch(() => undefined);
           send({ type: "error", error: { code: safeError.code, message: safeError.message }, partialContent: assistantContent });
         } finally {
           request.signal.removeEventListener("abort", abortGeneration);

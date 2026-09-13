@@ -8,10 +8,10 @@ function repository(): AcademicContextRepository {
       return ids.map((id) => ({ id, name: `${userId}-Asignatura-${id}` }));
     },
     async tasks(userId, ids) {
-      return ids.map((id) => ({ id, title: `${userId}-Tarea-${id}`, status: "PENDING", dueDate: null, priority: "MEDIUM", notes: null, subjectName: null }));
+      return ids.map((id) => ({ id, title: `${userId}-Tarea-${id}`, planningMode: "FLEXIBLE", type: "ESTUDIO", status: "PENDING", dueDate: null, priority: "MEDIUM", difficulty: 3, estimatedMinutes: 30, notes: null, completedAt: null, subjectName: null }));
     },
     async bosses(userId, ids) {
-      return ids.map((id) => ({ id, title: `${userId}-Boss-${id}`, date: new Date("2026-10-01T10:00:00Z"), topics: ["Tema 1"], preparation: 20, subjectName: "Matemáticas" }));
+      return ids.map((id) => ({ id, title: `${userId}-Boss-${id}`, date: new Date("2026-10-01T10:00:00Z"), topics: ["Tema 1"], difficulty: 3, preparation: 20, targetGrade: 8, expectedGrade: 7, actualGrade: null, subjectName: "Matemáticas" }));
     },
     async grades(userId, ids) {
       return ids.map((id) => ({ id, label: `${userId}-Nota-${id}`, value: 8.5, date: new Date("2026-09-01T00:00:00Z"), subjectName: "Lengua" }));

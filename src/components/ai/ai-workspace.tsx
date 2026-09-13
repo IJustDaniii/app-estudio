@@ -36,6 +36,10 @@ async function connectionFor(settings: AISettingsValue): Promise<ConnectionState
   }
 }
 
+function emptyContextOptions(): ContextOptions {
+  return { subjects: [], topics: [], tasks: [], bosses: [], grades: [], goals: [], studySessions: [], materials: [] };
+}
+
 export function AIWorkspace({ initialChats, initialChatPagination, initialActiveId, initialMessages, initialMessagePagination, initialSettings, contextOptions }: {
   initialChats: ChatSummary[]; initialChatPagination: Pagination; initialActiveId: string | null; initialMessages: ChatMessage[]; initialMessagePagination: Pagination; initialSettings: AISettingsValue; contextOptions: ContextOptions;
 }) {
@@ -56,6 +60,7 @@ export function AIWorkspace({ initialChats, initialChatPagination, initialActive
   const [uploading, setUploading] = useState(false);
   const [notice, setNotice] = useState("");
   const checkedInitialConnection = useRef(false);
+  const contextOptionsRequest = useRef(0);
 
   useEffect(() => {
     if (checkedInitialConnection.current) return;
@@ -136,9 +141,37 @@ export function AIWorkspace({ initialChats, initialChatPagination, initialActive
 
   async function saveSettings() {
     setBusy(true); setNotice("");
-    const response = await fetch("/api/ai/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(settings) });
-    if (!response.ok) setNotice(await errorMessage(response)); else { setNotice("Configuración guardada."); setConnection(await connectionFor(settings)); }
-    setBusy(false);
+    try {
+      const response = await fetch("/api/ai/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(settings) });
+      if (!response.ok) { setNotice(await errorMessage(response)); return; }
+      const saved = await response.json() as AISettingsValue;
+      setSettings(saved);
+      setSelection(effectiveContextSelection(saved.isAIEnabled && saved.isAcademicContextEnabled, selection, saved, saved.maxItemsPerCategory));
+      const refreshed = await refreshContextOptions(saved);
+      if (refreshed) setNotice("Configuración guardada.");
+      setConnection(await connectionFor(saved));
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "No se pudo guardar la configuración.");
+    } finally { setBusy(false); }
+  }
+
+  async function refreshContextOptions(nextSettings: AISettingsValue) {
+    const requestId = contextOptionsRequest.current + 1;
+    contextOptionsRequest.current = requestId;
+    if (!nextSettings.isAIEnabled || !nextSettings.isAcademicContextEnabled) {
+      setAvailableOptions(emptyContextOptions());
+      return true;
+    }
+    try {
+      const response = await fetch("/api/ai/context/options", { cache: "no-store" });
+      if (!response.ok) throw new Error(await errorMessage(response));
+      const nextOptions = await response.json() as ContextOptions;
+      if (requestId === contextOptionsRequest.current) setAvailableOptions(nextOptions);
+      return true;
+    } catch (error) {
+      if (requestId === contextOptionsRequest.current) setNotice(error instanceof Error ? error.message : "No se pudieron actualizar las opciones de contexto.");
+      return false;
+    }
   }
 
   async function testConnection() { setConnection({ status: "checking", message: "Comprobando Ollama…" }); setConnection(await connectionFor(settings)); }
@@ -200,7 +233,7 @@ export function AIWorkspace({ initialChats, initialChatPagination, initialActive
 
   return <section className="mx-auto flex h-[calc(100dvh-5rem)] min-h-[38rem] max-w-[96rem] flex-col px-0 lg:h-screen lg:p-5">
     <div className="flex items-center gap-3 border-b bg-card px-4 py-3 lg:rounded-t-xl lg:border"><span className="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground"><Bot className="size-4" /></span><div><h1 className="text-base font-semibold">IA</h1><p className={`text-xs ${!settings.isAIEnabled || connection.status === "offline" ? "text-destructive" : "text-muted-foreground"}`}>{!settings.isAIEnabled ? "La IA está desactivada en tus ajustes." : connection.message}</p></div>{settings.isAIEnabled && connection.status === "offline" && <Button type="button" size="sm" variant="outline" className="ml-auto" onClick={testConnection}><RefreshCw className="size-3.5" />Reintentar</Button>}</div>
-    <div className="grid min-h-0 flex-1 bg-card lg:grid-cols-[17rem_1fr] lg:border-x"><ChatSidebar chats={chats} activeId={activeId} disabled={busy} hasMore={Boolean(chatPagination.hasNext)} loadingMore={loadingMoreChats} onLoadMore={loadMoreChats} onCreate={createChat} onSelect={selectChat} onRename={renameChat} onDelete={deleteChat} /><div className="flex min-h-0 flex-col"><AISettingsPanel value={settings} connection={connection} busy={busy} onChange={(value) => { setSettings(value); setSelection(effectiveContextSelection(value.isAcademicContextEnabled, selection, value, value.maxItemsPerCategory)); }} onSave={saveSettings} onTest={testConnection} />{notice && <div className="flex items-start gap-2 border-b bg-muted/60 px-4 py-2 text-xs" role="status"><CircleAlert className="mt-0.5 size-3.5 shrink-0" />{notice}</div>}<MessageList messages={messages} isLoading={loadingChat} canLoadOlder={Boolean(messagePagination.hasNext)} loadingOlder={loadingOlderMessages} onLoadOlder={loadOlderMessages} /><ChatComposer disabled={busy || loadingChat || uploading || !settings.isAIEnabled} contextEnabled={settings.isAcademicContextEnabled} usePersonalContext={usePersonalContext} permissions={settings} maxItemsPerCategory={settings.maxItemsPerCategory} options={availableOptions} context={selection} uploading={uploading} onContextChange={setSelection} onPersonalContextChange={(value) => { setUsePersonalContext(value); if (!value) setSelection(emptyContextSelection); }} onUpload={uploadMaterials} onSend={sendMessage} /></div></div>
+    <div className="grid min-h-0 flex-1 bg-card lg:grid-cols-[17rem_1fr] lg:border-x"><ChatSidebar chats={chats} activeId={activeId} disabled={busy} hasMore={Boolean(chatPagination.hasNext)} loadingMore={loadingMoreChats} onLoadMore={loadMoreChats} onCreate={createChat} onSelect={selectChat} onRename={renameChat} onDelete={deleteChat} /><div className="flex min-h-0 flex-col"><AISettingsPanel value={settings} connection={connection} busy={busy} onChange={(value) => { setSettings(value); setSelection(effectiveContextSelection(value.isAIEnabled && value.isAcademicContextEnabled, selection, value, value.maxItemsPerCategory)); if (!value.isAIEnabled || !value.isAcademicContextEnabled) setAvailableOptions(emptyContextOptions()); }} onSave={saveSettings} onTest={testConnection} />{notice && <div className="flex items-start gap-2 border-b bg-muted/60 px-4 py-2 text-xs" role="status"><CircleAlert className="mt-0.5 size-3.5 shrink-0" />{notice}</div>}<MessageList messages={messages} isLoading={loadingChat} canLoadOlder={Boolean(messagePagination.hasNext)} loadingOlder={loadingOlderMessages} onLoadOlder={loadOlderMessages} /><ChatComposer disabled={busy || loadingChat || uploading || !settings.isAIEnabled} contextEnabled={settings.isAIEnabled && settings.isAcademicContextEnabled} usePersonalContext={usePersonalContext} permissions={settings} maxItemsPerCategory={settings.maxItemsPerCategory} options={availableOptions} context={selection} uploading={uploading} onContextChange={setSelection} onPersonalContextChange={(value) => { setUsePersonalContext(value); if (!value) setSelection(emptyContextSelection); }} onUpload={uploadMaterials} onSend={sendMessage} /></div></div>
     <p className="border-t bg-card px-4 py-2 text-center text-[11px] text-muted-foreground lg:rounded-b-xl lg:border">La IA puede equivocarse. Revisa fechas, notas y decisiones académicas importantes.</p>
   </section>;
 }

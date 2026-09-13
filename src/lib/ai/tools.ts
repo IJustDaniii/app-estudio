@@ -38,11 +38,13 @@ export const AI_TOOL_DEFINITIONS: AIToolDefinition[] = [
   { name: "consult_gamification", description: "Consulta XP, nivel, monedas, misiones y racha del usuario.", access: "read", parameters: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 20 } } } },
 ];
 
-export function toolDefinitionsForPermissions(permissions: AIAcademicPermissions = defaultAIAcademicPermissions, categories?: AIContextCategory[]) {
+export function toolDefinitionsForPermissions(permissions: AIAcademicPermissions = defaultAIAcademicPermissions, categories?: AIContextCategory[], toolNames?: string[]) {
   const allowedCategories = categories ? new Set(categories) : null;
+  const allowedToolNames = toolNames ? new Set(toolNames) : null;
   return AI_TOOL_DEFINITIONS.filter((tool) => {
     const category = toolCategory[tool.name];
     if (allowedCategories && !allowedCategories.has(category)) return false;
+    if (allowedToolNames && !allowedToolNames.has(tool.name)) return false;
     if (category === "grades") return permissions.canReadGrades;
     if (category === "tasksAndBosses") return permissions.canReadTasksAndBosses;
     if (category === "sessionsAndStatistics") return permissions.canReadSessionsAndStatistics;

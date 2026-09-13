@@ -41,4 +41,16 @@ describe("endurecimiento de IA", () => {
   it("rechaza cuerpos JSON excesivos antes de validarlos", async () => {
     await expect(parseAIJson(new Request("http://localhost", { method: "POST", body: JSON.stringify({ content: "x".repeat(70_000) }) }), z.object({ content: z.string() }))).rejects.toThrow("AI_BODY_TOO_LARGE");
   });
+
+  it("rechaza cuerpos grandes aunque no declaren Content-Length", async () => {
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('{"content":"' + "x".repeat(66_000)));
+        controller.enqueue(encoder.encode('x"}'));
+        controller.close();
+      },
+    });
+    await expect(parseAIJson(new Request("http://localhost", { method: "POST", body, ...( { duplex: "half" } as Record<string, string> ) }), z.object({ content: z.string() }))).rejects.toThrow("AI_BODY_TOO_LARGE");
+  });
 });

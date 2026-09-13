@@ -1,6 +1,8 @@
 import type { Prisma } from "@prisma/client";
 import { calculateLevel, calculateStudyStreak } from "@/lib/domain/progress";
+import { DEFAULT_TIME_ZONE, normalizeTimeZone, zonedDateKey, zonedDayOfWeek, zonedDayRange, zonedDayStart } from "@/lib/domain/dates";
 import type { AcademicContextRepository, ContextQueryOptions } from "@/lib/ai/context";
+import { serializeBossContext, serializeMaterialMetadata, serializeTaskContext } from "@/lib/ai/serialization";
 import type { ReadOnlyToolRepository } from "@/lib/ai/tools";
 import type { AIAcademicPermissions, ContextSelection } from "@/lib/ai/validation";
 import { aiModelSchema, DEFAULT_AI_CONTEXT_ITEM_LIMIT, DEFAULT_AI_CONTEXT_LIMIT, DEFAULT_AI_MODEL, DEFAULT_OLLAMA_URL, ollamaUrlSchema, defaultAIAcademicPermissions } from "@/lib/ai/validation";
@@ -15,8 +17,8 @@ function idWhere(ids: string[]) {
   return ids.length ? { id: { in: ids } } : {};
 }
 
-function subjectWhere(options: ContextQueryOptions) {
-  return options.subjectIds?.length ? { subjectId: { in: options.subjectIds } } : {};
+function subjectWhere(options: ContextQueryOptions, ids: string[]) {
+  return ids.length ? {} : options.subjectIds?.length ? { subjectId: { in: options.subjectIds } } : {};
 }
 
 function dateWhere(from?: Date, to?: Date) {
@@ -28,26 +30,26 @@ export const academicContextRepository: AcademicContextRepository = {
     return prisma.subject.findMany({ where: { userId, ...idWhere(ids), name: textFilter(options.query) }, select: { id: true, name: true }, orderBy: { name: "asc" }, take: options.limit });
   },
   async topics(userId, ids, options = { limit: DEFAULT_AI_CONTEXT_ITEM_LIMIT }) {
-    const rows = await prisma.topic.findMany({ where: { userId, ...idWhere(ids), ...subjectWhere(options), name: textFilter(options.query) }, select: { id: true, name: true, subject: { select: { name: true } } }, orderBy: { updatedAt: "desc" }, take: options.limit });
+    const rows = await prisma.topic.findMany({ where: { userId, ...idWhere(ids), ...subjectWhere(options, ids), name: textFilter(options.query) }, select: { id: true, name: true, subject: { select: { name: true } } }, orderBy: { updatedAt: "desc" }, take: options.limit });
     return rows.map(({ subject, ...topic }) => ({ ...topic, subjectName: subject.name }));
   },
   async tasks(userId, ids, options = { limit: DEFAULT_AI_CONTEXT_ITEM_LIMIT }) {
-    const rows = await prisma.task.findMany({ where: { userId, ...idWhere(ids), ...subjectWhere(options), title: textFilter(options.query), ...(options.onlyOpen ? { status: { not: "COMPLETED" } } : {}), ...(dateWhere(options.from, options.to) ? { dueDate: dateWhere(options.from, options.to) } : {}) }, select: { id: true, title: true, status: true, dueDate: true, priority: true, notes: true, subject: { select: { name: true } } }, orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }], take: options.limit });
+    const rows = await prisma.task.findMany({ where: { userId, ...idWhere(ids), ...subjectWhere(options, ids), title: textFilter(options.query), ...(options.onlyOpen ? { status: { not: "COMPLETED" } } : {}), ...(dateWhere(options.from, options.to) ? { dueDate: dateWhere(options.from, options.to) } : {}) }, select: { id: true, title: true, planningMode: true, type: true, priority: true, difficulty: true, dueDate: true, estimatedMinutes: true, status: true, notes: true, completedAt: true, subject: { select: { name: true } } }, orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }], take: options.limit });
     return rows.map(({ subject, ...task }) => ({ ...task, subjectName: subject?.name ?? null }));
   },
   async bosses(userId, ids, options = { limit: DEFAULT_AI_CONTEXT_ITEM_LIMIT }) {
-    const rows = await prisma.boss.findMany({ where: { userId, ...idWhere(ids), ...subjectWhere(options), title: textFilter(options.query), ...(dateWhere(options.from, options.to) ? { date: dateWhere(options.from, options.to) } : {}) }, select: { id: true, title: true, date: true, topics: true, preparation: true, subject: { select: { name: true } } }, orderBy: { date: "asc" }, take: options.limit });
+    const rows = await prisma.boss.findMany({ where: { userId, ...idWhere(ids), ...subjectWhere(options, ids), title: textFilter(options.query), ...(dateWhere(options.from, options.to) ? { date: dateWhere(options.from, options.to) } : {}) }, select: { id: true, title: true, date: true, topics: true, difficulty: true, preparation: true, targetGrade: true, expectedGrade: true, actualGrade: true, subject: { select: { name: true } } }, orderBy: { date: "asc" }, take: options.limit });
     return rows.map(({ subject, ...boss }) => ({ ...boss, subjectName: subject.name }));
   },
   async grades(userId, ids, options = { limit: DEFAULT_AI_CONTEXT_ITEM_LIMIT }) {
-    const rows = await prisma.grade.findMany({ where: { userId, ...idWhere(ids), ...subjectWhere(options), label: textFilter(options.query) }, select: { id: true, label: true, value: true, date: true, subject: { select: { name: true } } }, orderBy: { date: "desc" }, take: options.limit });
+    const rows = await prisma.grade.findMany({ where: { userId, ...idWhere(ids), ...subjectWhere(options, ids), label: textFilter(options.query) }, select: { id: true, label: true, value: true, date: true, subject: { select: { name: true } } }, orderBy: { date: "desc" }, take: options.limit });
     return rows.map(({ subject, ...grade }) => ({ ...grade, subjectName: subject.name }));
   },
   async goals(userId, ids, options = { limit: DEFAULT_AI_CONTEXT_ITEM_LIMIT }) {
     return prisma.goal.findMany({ where: { userId, ...idWhere(ids), title: textFilter(options.query), ...(dateWhere(options.from, options.to) ? { targetDate: dateWhere(options.from, options.to) } : {}) }, select: { id: true, title: true, progress: true, targetDate: true, isComplete: true }, orderBy: [{ isComplete: "asc" }, { targetDate: "asc" }], take: options.limit });
   },
   async studySessions(userId, ids, options = { limit: DEFAULT_AI_CONTEXT_ITEM_LIMIT }) {
-    const rows = await prisma.studySession.findMany({ where: { userId, ...idWhere(ids), ...subjectWhere(options), ...(dateWhere(options.from, options.to) ? { startedAt: dateWhere(options.from, options.to) } : {}) }, select: { id: true, startedAt: true, actualMinutes: true, subject: { select: { name: true } }, task: { select: { title: true } } }, orderBy: { startedAt: "desc" }, take: options.limit });
+    const rows = await prisma.studySession.findMany({ where: { userId, ...idWhere(ids), ...subjectWhere(options, ids), ...(dateWhere(options.from, options.to) ? { startedAt: dateWhere(options.from, options.to) } : {}) }, select: { id: true, startedAt: true, actualMinutes: true, subject: { select: { name: true } }, task: { select: { title: true } } }, orderBy: { startedAt: "desc" }, take: options.limit });
     return rows.map(({ subject, task, ...session }) => ({ ...session, subjectName: subject?.name ?? null, taskTitle: task?.title ?? null }));
   },
   async schedule(userId, options) {
@@ -81,17 +83,21 @@ export const academicContextRepository: AcademicContextRepository = {
   },
   async gamification(userId, options) {
     const now = options.to ?? new Date();
-    const from = options.from ?? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const timeZone = options.timeZone ?? DEFAULT_TIME_ZONE;
+    const from = options.from ?? zonedDayStart(now, timeZone, -7);
+    const missionFrom = new Date(`${zonedDateKey(from, timeZone)}T00:00:00.000Z`);
+    const missionTo = new Date(`${zonedDateKey(now, timeZone)}T23:59:59.999Z`);
     const [user, missions, sessions] = await Promise.all([
       prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { xp: true, coins: true } }),
-      prisma.mission.findMany({ where: { userId, date: { gte: from, lte: now } }, select: { title: true, progress: true, target: true, isComplete: true, rewardXp: true, rewardCoins: true }, orderBy: { date: "desc" }, take: options.limit }),
+      prisma.mission.findMany({ where: { userId, date: { gte: missionFrom, lte: missionTo } }, select: { title: true, progress: true, target: true, isComplete: true, rewardXp: true, rewardCoins: true }, orderBy: { date: "desc" }, take: options.limit }),
       prisma.studySession.findMany({ where: { userId }, select: { startedAt: true }, orderBy: { startedAt: "desc" }, take: 370 }),
     ]);
     const level = calculateLevel(user.xp);
-    return { xp: user.xp, coins: user.coins, level: level.level, currentXp: level.currentXp, nextLevelXp: level.nextLevelXp, streak: calculateStudyStreak(sessions.map((session) => session.startedAt), now), missions };
+    return { xp: user.xp, coins: user.coins, level: level.level, currentXp: level.currentXp, nextLevelXp: level.nextLevelXp, streak: calculateStudyStreak(sessions.map((session) => session.startedAt), now, timeZone), missions };
   },
   async materials(userId, ids, options = { limit: DEFAULT_AI_CONTEXT_ITEM_LIMIT }) {
-    return prisma.material.findMany({ where: { userId, ...idWhere(ids), ...subjectWhere(options), name: textFilter(options.query) }, select: { id: true, name: true, mimeType: true, size: true, storageKey: true }, orderBy: { uploadedAt: "desc" }, take: options.limit });
+    const rows = await prisma.material.findMany({ where: { userId, ...idWhere(ids), ...subjectWhere(options, ids), name: textFilter(options.query) }, select: { id: true, name: true, mimeType: true, size: true, description: true, type: true, processingStatus: true, storageKey: true, subject: { select: { name: true } }, topic: { select: { name: true } } }, orderBy: { uploadedAt: "desc" }, take: options.limit });
+    return rows.map(({ subject, topic, ...material }) => ({ ...material, subjectName: subject?.name ?? null, topicName: topic?.name ?? null }));
   },
 };
 
@@ -106,21 +112,22 @@ function toolLimit(limit: number, maxItemsPerCategory: number) {
   return Math.min(limit, maxItemsPerCategory);
 }
 
-export function scopedReadOnlyToolRepository(selection: ContextSelection, permissions: AIAcademicPermissions = defaultAIAcademicPermissions, maxItemsPerCategory = DEFAULT_AI_CONTEXT_ITEM_LIMIT, scopeSubjectIds: string[] = []): ReadOnlyToolRepository {
-  const subjects = (userId: string, args: { query?: string; limit: number }) => prisma.subject.findMany({ where: { userId, ...(selection.subjectIds.length ? { id: { in: selection.subjectIds } } : scopeSubjectIds.length ? { id: { in: scopeSubjectIds } } : {}), name: textFilter(args.query) }, select: { id: true, name: true, color: true }, orderBy: { name: "asc" }, take: toolLimit(args.limit, maxItemsPerCategory) });
+export function scopedReadOnlyToolRepository(selection: ContextSelection, permissions: AIAcademicPermissions = defaultAIAcademicPermissions, maxItemsPerCategory = DEFAULT_AI_CONTEXT_ITEM_LIMIT, scopeSubjectIds: string[] = [], timeZone = DEFAULT_TIME_ZONE, now = new Date()): ReadOnlyToolRepository {
+  const limit = (requested: number) => toolLimit(requested, maxItemsPerCategory);
+  const subjects = (userId: string, args: { query?: string; limit: number }) => selection.topicIds.length ? Promise.resolve([]) : prisma.subject.findMany({ where: { userId, ...(selection.subjectIds.length ? { id: { in: selection.subjectIds } } : scopeSubjectIds.length ? { id: { in: scopeSubjectIds } } : {}), name: textFilter(args.query) }, select: { id: true, name: true, color: true }, orderBy: { name: "asc" }, take: limit(args.limit) });
   return {
     subjects,
-    topics: (userId, args) => prisma.topic.findMany({ where: { userId, ...(selection.topicIds.length ? { id: { in: selection.topicIds } } : {}), ...(scopedSubjectIds(selection, scopeSubjectIds).length ? { subjectId: { in: scopedSubjectIds(selection, scopeSubjectIds) } } : {}), name: textFilter(args.query) }, select: { id: true, name: true, subject: { select: { name: true } } }, orderBy: { name: "asc" }, take: toolLimit(args.limit, maxItemsPerCategory) }),
-    tasks: (userId, args) => permissions.canReadTasksAndBosses ? prisma.task.findMany({ where: { userId, ...(selection.taskIds.length ? { id: { in: selection.taskIds } } : {}), ...(scopedSubjectIds(selection, scopeSubjectIds, args.subjectId).length ? { subjectId: { in: scopedSubjectIds(selection, scopeSubjectIds, args.subjectId) } } : {}), title: textFilter(args.query) }, select: { id: true, title: true, status: true, priority: true, difficulty: true, dueDate: true, estimatedMinutes: true, subject: { select: { name: true } } }, orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }], take: toolLimit(args.limit, maxItemsPerCategory) }) : Promise.resolve([]),
-    bosses: (userId, args) => permissions.canReadTasksAndBosses ? prisma.boss.findMany({ where: { userId, ...(selection.bossIds.length ? { id: { in: selection.bossIds } } : {}), ...(scopedSubjectIds(selection, scopeSubjectIds, args.subjectId).length ? { subjectId: { in: scopedSubjectIds(selection, scopeSubjectIds, args.subjectId) } } : {}), title: textFilter(args.query) }, select: { id: true, title: true, date: true, topics: true, preparation: true, targetGrade: true, expectedGrade: true, actualGrade: true, subject: { select: { name: true } } }, orderBy: { date: "asc" }, take: toolLimit(args.limit, maxItemsPerCategory) }) : Promise.resolve([]),
-    goals: (userId, args) => permissions.canReadTasksAndBosses ? prisma.goal.findMany({ where: { userId, ...(selection.goalIds.length ? { id: { in: selection.goalIds } } : {}), title: textFilter(args.query) }, select: { id: true, title: true, progress: true, targetDate: true, isComplete: true }, orderBy: [{ isComplete: "asc" }, { targetDate: "asc" }], take: toolLimit(args.limit, maxItemsPerCategory) }) : Promise.resolve([]),
-    grades: (userId, args) => permissions.canReadGrades ? prisma.grade.findMany({ where: { userId, ...(selection.gradeIds.length ? { id: { in: selection.gradeIds } } : {}), ...(scopedSubjectIds(selection, scopeSubjectIds, args.subjectId).length ? { subjectId: { in: scopedSubjectIds(selection, scopeSubjectIds, args.subjectId) } } : {}), label: textFilter(args.query) }, select: { id: true, label: true, value: true, date: true, subject: { select: { name: true } } }, orderBy: { date: "desc" }, take: toolLimit(args.limit, maxItemsPerCategory) }) : Promise.resolve([]),
-    studySessions: (userId, args) => permissions.canReadSessionsAndStatistics ? prisma.studySession.findMany({ where: { userId, ...(selection.studySessionIds.length ? { id: { in: selection.studySessionIds } } : {}), ...(scopedSubjectIds(selection, scopeSubjectIds, args.subjectId).length ? { subjectId: { in: scopedSubjectIds(selection, scopeSubjectIds, args.subjectId) } } : {}) }, select: { id: true, startedAt: true, actualMinutes: true, subject: { select: { name: true } }, task: { select: { title: true } } }, orderBy: { startedAt: "desc" }, take: toolLimit(args.limit, maxItemsPerCategory) }) : Promise.resolve([]),
-    statistics: (userId, args) => permissions.canReadSessionsAndStatistics ? academicContextRepository.statistics!(userId, { limit: toolLimit(args.limit, maxItemsPerCategory), from: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000), to: new Date() }) : Promise.resolve({}),
-    schedule: (userId, args) => permissions.canReadSchedule ? academicContextRepository.schedule!(userId, { limit: toolLimit(args.limit, maxItemsPerCategory), dayOfWeek: new Date().getDay() || 7 }) : Promise.resolve([]),
-    calendar: (userId, args) => permissions.canReadSchedule && permissions.canReadTasksAndBosses ? academicContextRepository.calendar!(userId, { limit: toolLimit(args.limit, maxItemsPerCategory), from: new Date(), to: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) }) : Promise.resolve([]),
-    materials: (userId, args) => permissions.canReadMaterials ? prisma.material.findMany({ where: { userId, ...(selection.materialIds.length ? { id: { in: selection.materialIds } } : {}), ...(scopedSubjectIds(selection, scopeSubjectIds, args.subjectId).length ? { subjectId: { in: scopedSubjectIds(selection, scopeSubjectIds, args.subjectId) } } : {}), name: textFilter(args.query) }, select: { id: true, name: true, mimeType: true, size: true, subject: { select: { name: true } } }, orderBy: { uploadedAt: "desc" }, take: toolLimit(args.limit, maxItemsPerCategory) }) : Promise.resolve([]),
-    gamification: (userId, args) => permissions.canReadGamification ? academicContextRepository.gamification!(userId, { limit: toolLimit(args.limit, maxItemsPerCategory), from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), to: new Date() }) : Promise.resolve({}),
+    topics: async (userId, args) => selection.subjectIds.length && !selection.topicIds.length ? [] : academicContextRepository.topics!(userId, selection.topicIds, { query: args.query, limit: limit(args.limit), subjectIds: selection.topicIds.length ? undefined : scopedSubjectIds(selection, scopeSubjectIds), timeZone }),
+    tasks: async (userId, args) => permissions.canReadTasksAndBosses ? (await academicContextRepository.tasks(userId, selection.taskIds, { query: args.query, limit: limit(args.limit), subjectIds: selection.taskIds.length ? undefined : scopedSubjectIds(selection, scopeSubjectIds, args.subjectId), timeZone })).map((task) => serializeTaskContext(task, timeZone)) : [],
+    bosses: async (userId, args) => permissions.canReadTasksAndBosses ? (await academicContextRepository.bosses(userId, selection.bossIds, { query: args.query, limit: limit(args.limit), subjectIds: selection.bossIds.length ? undefined : scopedSubjectIds(selection, scopeSubjectIds, args.subjectId), timeZone })).map((boss) => serializeBossContext(boss, timeZone)) : [],
+    goals: async (userId, args) => permissions.canReadTasksAndBosses ? academicContextRepository.goals!(userId, selection.goalIds, { query: args.query, limit: limit(args.limit), timeZone }) : [],
+    grades: async (userId, args) => permissions.canReadGrades ? academicContextRepository.grades(userId, selection.gradeIds, { query: args.query, limit: limit(args.limit), subjectIds: selection.gradeIds.length ? undefined : scopedSubjectIds(selection, scopeSubjectIds, args.subjectId), timeZone }) : [],
+    studySessions: async (userId, args) => permissions.canReadSessionsAndStatistics ? academicContextRepository.studySessions(userId, selection.studySessionIds, { limit: limit(args.limit), subjectIds: selection.studySessionIds.length ? undefined : scopedSubjectIds(selection, scopeSubjectIds, args.subjectId), timeZone }) : [],
+    statistics: (userId, args) => permissions.canReadSessionsAndStatistics ? academicContextRepository.statistics!(userId, { limit: limit(args.limit), from: zonedDayStart(now, timeZone, -14), to: now, timeZone }) : Promise.resolve({}),
+    schedule: (userId, args) => permissions.canReadSchedule ? academicContextRepository.schedule!(userId, { limit: limit(args.limit), dayOfWeek: zonedDayOfWeek(now, timeZone), timeZone }) : Promise.resolve([]),
+    calendar: (userId, args) => permissions.canReadSchedule && permissions.canReadTasksAndBosses ? academicContextRepository.calendar!(userId, { limit: limit(args.limit), ...zonedDayRange(now, timeZone, 0, 30), timeZone }) : Promise.resolve([]),
+    materials: async (userId, args) => permissions.canReadMaterials ? (await academicContextRepository.materials(userId, selection.materialIds, { query: args.query, limit: limit(args.limit), subjectIds: selection.materialIds.length ? undefined : scopedSubjectIds(selection, scopeSubjectIds, args.subjectId), timeZone })).map(serializeMaterialMetadata) : [],
+    gamification: (userId, args) => permissions.canReadGamification ? academicContextRepository.gamification!(userId, { limit: limit(args.limit), from: zonedDayStart(now, timeZone, -7), to: now, timeZone }) : Promise.resolve({}),
   };
 }
 
@@ -161,6 +168,11 @@ export async function getAISettings(userId: string) {
     createdAt: new Date(0),
     updatedAt: new Date(0),
   };
+}
+
+export async function getUserTimezone(userId: string) {
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { timezone: true } });
+  return normalizeTimeZone(user.timezone);
 }
 
 export async function getAIContextOptions(userId: string, settings?: Awaited<ReturnType<typeof getAISettings>>) {
