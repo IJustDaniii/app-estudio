@@ -7,7 +7,7 @@ import { materialListArgs } from "@/lib/materials/listing";
 import { contentLengthExceedsMaterialBodyLimit, getMaterialRequestBodyLimit, limitMaterialRequestBody, MaterialBodyTooLargeError } from "@/lib/materials/body-limit";
 import { resolveMaterialSubjectId } from "@/lib/materials/references";
 import { materialResponseHeaders } from "@/lib/materials/preview";
-import { appendMaterialFiles } from "@/lib/materials/upload";
+import { appendMaterialFiles, resetMaterialUploadForm } from "@/lib/materials/upload";
 import { deleteMaterialWithCompensation, isDuplicateInBatch, MaterialConsistencyError, putMaterialWithCompensation, sha256, validateMaterialBatch, validateMaterialContent } from "@/lib/materials/service";
 import { DEFAULT_MAX_MATERIAL_BATCH_SIZE, DEFAULT_MAX_MATERIAL_FILES } from "@/lib/materials/constants";
 import { LocalStorageProvider } from "@/lib/materials/storage";
@@ -61,6 +61,18 @@ describe("subida y validación de materiales", () => {
     data.append("files", first);
     appendMaterialFiles(data, [first, second]);
     expect(data.getAll("files").map((file) => (file as File).name)).toEqual(["uno.pdf", "dos.pdf"]);
+  });
+
+  it("permite resetear el formulario después de completar la subida asíncrona", async () => {
+    let resetCalls = 0;
+    const form = { reset: () => { resetCalls += 1; } };
+    const event = { currentTarget: form as typeof form | null };
+    const capturedForm = event.currentTarget;
+    await Promise.resolve();
+    event.currentTarget = null;
+    if (!capturedForm) throw new Error("No se capturó el formulario");
+    resetMaterialUploadForm(capturedForm);
+    expect(resetCalls).toBe(1);
   });
 
   it("aplica límites de archivos y tamaño total del lote", () => {

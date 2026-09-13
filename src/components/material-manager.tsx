@@ -4,7 +4,7 @@ import { ChangeEvent, DragEvent, FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Download, FileText, Heart, ImageIcon, Pencil, Star, Trash2, Upload } from "lucide-react";
 import { DEFAULT_MAX_MATERIAL_BATCH_SIZE, DEFAULT_MAX_MATERIAL_FILES, MATERIAL_TYPE_LABELS, MATERIAL_TYPES, isPreviewableMimeType, type MaterialTypeValue } from "@/lib/materials/constants";
-import { appendMaterialFiles } from "@/lib/materials/upload";
+import { appendMaterialFiles, resetMaterialUploadForm } from "@/lib/materials/upload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -100,7 +100,8 @@ export function MaterialManager({ materials, subjects, topics, tasks, bosses, in
   async function upload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!files.length) return setMessage("Selecciona uno o varios archivos.");
-    const data = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const data = new FormData(form);
     appendMaterialFiles(data, files);
     setMessage("Subiendo materiales…");
     const response = await fetch("/api/materials", { method: "POST", body: data });
@@ -108,7 +109,7 @@ export function MaterialManager({ materials, subjects, topics, tasks, bosses, in
     const failedNames = (result.failed ?? []).map((item: { name: string; error: string }) => `${item.name} (${item.error})`).join(", ");
     if (!response.ok && response.status !== 207) return setMessage(`${result.error ?? "No se pudo subir el material."}${failedNames ? ` ${failedNames}` : ""}`);
     setFiles([]);
-    event.currentTarget.reset();
+    resetMaterialUploadForm(form);
     const duplicateNames = (result.duplicates ?? []).map((item: { name: string }) => item.name).join(", ");
     setMessage(`${result.created?.length ?? 0} creado(s)${duplicateNames ? ` · Duplicados: ${duplicateNames}` : ""}${failedNames ? ` · Fallidos: ${failedNames}` : ""}.`);
     router.refresh();
