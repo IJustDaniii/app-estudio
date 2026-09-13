@@ -1,4 +1,5 @@
 import type { ContextSelection } from "@/lib/ai/validation";
+import { extractMaterialText } from "@/lib/ai/materials";
 
 type ContextItemType = "subject" | "task" | "boss" | "grade" | "goal" | "studySession" | "material";
 type ContextSnapshotItem = { type: ContextItemType; id: string; label: string };
@@ -25,6 +26,7 @@ export type AcademicContextResult = {
   text: string;
   images: Array<{ id: string; name: string; mimeType: string; base64: string }>;
   snapshot: { included: ContextSnapshotItem[]; omitted: ContextSnapshotItem[] };
+  warnings: string[];
 };
 
 function iso(value: Date | null) {
@@ -44,7 +46,7 @@ export async function buildAcademicContext(input: {
   repository: AcademicContextRepository;
   loadMaterial: (storageKey: string) => Promise<Buffer>;
 }): Promise<AcademicContextResult> {
-  const empty: AcademicContextResult = { text: "", images: [], snapshot: { included: [], omitted: [] } };
+  const empty: AcademicContextResult = { text: "", images: [], snapshot: { included: [], omitted: [] }, warnings: [] };
   if (!input.isEnabled) return empty;
 
   const [subjects, tasks, bosses, grades, goals, sessions, materials] = await Promise.all([
@@ -66,18 +68,23 @@ export async function buildAcademicContext(input: {
   for (const item of ordered(sessions, input.selection.studySessionIds)) entries.push({ item: { type: "studySession", id: item.id, label: `${item.actualMinutes} min · ${item.subjectName ?? item.taskTitle ?? "Estudio"}` }, text: `[Sesión] fecha=${iso(item.startedAt)}; minutos=${item.actualMinutes}; asignatura=${item.subjectName ?? "sin asignatura"}; tarea=${item.taskTitle ?? "sin tarea"}` });
 
   const images: AcademicContextResult["images"] = [];
+  const warnings: string[] = [];
+  let imageBytes = 0;
   for (const item of ordered(materials, input.selection.materialIds)) {
     const snapshot = { type: "material" as const, id: item.id, label: item.name };
     try {
       const content = await input.loadMaterial(item.storageKey);
-      if (item.mimeType.startsWith("image/") && images.length < 3 && content.length <= 10 * 1024 * 1024) {
+      if (item.mimeType.startsWith("image/") && images.length < 3 && content.length <= 10 * 1024 * 1024 && imageBytes + content.length <= 15 * 1024 * 1024) {
         images.push({ id: item.id, name: item.name, mimeType: item.mimeType, base64: content.toString("base64") });
+        imageBytes += content.length;
         entries.push({ item: snapshot, text: `[Imagen adjunta] ${item.name}` });
       } else {
-        entries.push({ item: snapshot, text: `[Material] ${item.name}; tipo=${item.mimeType}; extracción de texto pendiente` });
+        const extracted = await extractMaterialText(item.mimeType, content, input.maxCharacters);
+        entries.push({ item: snapshot, text: `[Material] ${item.name}; tipo=${item.mimeType}\n${extracted || "(sin texto extraíble)"}` });
       }
-    } catch {
+    } catch (error) {
       entries.push({ item: snapshot, text: `[Material no legible] ${item.name}` });
+      warnings.push(`${item.name}: ${error instanceof Error ? error.message : "AI_MATERIAL_INVALID"}`);
     }
   }
 
@@ -91,5 +98,5 @@ export async function buildAcademicContext(input: {
     if (text.length + line.length > input.maxCharacters) omitted.push(entry.item);
     else { text += line; included.push(entry.item); }
   }
-  return { text: included.length ? text.trimEnd() : "", images: images.filter((image) => included.some((item) => item.type === "material" && item.id === image.id)), snapshot: { included, omitted } };
+  return { text: included.length ? text.trimEnd() : "", images: images.filter((image) => included.some((item) => item.type === "material" && item.id === image.id)), snapshot: { included, omitted }, warnings };
 }

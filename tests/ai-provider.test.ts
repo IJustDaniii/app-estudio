@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AIProviderError } from "@/lib/ai/errors";
 import { OllamaProvider } from "@/lib/ai/providers/ollama";
+import { ollamaUrlSchema } from "@/lib/ai/validation";
 
 function streamResponse(chunks: string[]) {
   const encoder = new TextEncoder();
@@ -13,6 +14,12 @@ function streamResponse(chunks: string[]) {
 }
 
 describe("OllamaProvider", () => {
+  it("allows only loopback HTTP URLs", () => {
+    expect(ollamaUrlSchema.parse("http://localhost:11434/")).toBe("http://localhost:11434");
+    expect(ollamaUrlSchema.safeParse("http://169.254.169.254:11434").success).toBe(false);
+    expect(ollamaUrlSchema.safeParse("https://example.com").success).toBe(false);
+    expect(ollamaUrlSchema.safeParse("http://localhost:11434/api").success).toBe(false);
+  });
   it("reports model availability and capabilities", async () => {
     const requests: string[] = [];
     const provider = new OllamaProvider(async (input) => {

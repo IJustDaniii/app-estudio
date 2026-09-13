@@ -31,6 +31,13 @@ export const aiSettingsSchema = z.object({
   contextLimit: z.number().int().min(1_000).max(50_000),
 });
 
+export const aiConnectionTestSchema = aiSettingsSchema.pick({ ollamaUrl: true, model: true });
+
+export const listChatsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).max(1_000).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(50),
+});
+
 const idList = z.array(z.string().cuid()).max(AI_CONTEXT_ITEM_LIMIT);
 
 export const contextSelectionSchema = z.object({

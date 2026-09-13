@@ -117,6 +117,7 @@ export class OllamaProvider implements AIProvider {
             content: message.content,
             ...(message.images?.length ? { images: message.images } : {}),
             ...(message.toolName ? { tool_name: message.toolName } : {}),
+            ...(message.toolCalls?.length ? { tool_calls: message.toolCalls.map((call) => ({ type: "function", function: { name: call.name, arguments: call.arguments } })) } : {}),
           })),
           ...(input.tools?.length ? { tools: input.tools.map((tool) => ({ type: "function", function: { name: tool.name, description: tool.description, parameters: tool.parameters } })) } : {}),
           stream: true,

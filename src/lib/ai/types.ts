@@ -5,6 +5,7 @@ export type AIMessageInput = {
   content: string;
   images?: string[];
   toolName?: string;
+  toolCalls?: AIToolCall[];
 };
 
 export type AIToolDefinition = {
