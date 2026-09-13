@@ -38,7 +38,7 @@ Orden: `reglas-progreso` → `sesiones-seguras` → `recompensas-idempotentes` �
 
 - [x] Actualizar README y SPEC para retirar contradicciones sobre las reglas actuales.
 - [x] Registrar la decisión importante en un ADR y añadir notas del parche.
-- [ ] Ejecutar todas las comprobaciones y revisar el diff final.
+- [x] Ejecutar todas las comprobaciones y revisar el diff final.
 
 ## Puntos de control
 

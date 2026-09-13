@@ -21,7 +21,7 @@
 
 ## Pruebas realizadas
 
-- `npm test`: 26 archivos y 168 pruebas en verde.
+- `npm test`: 29 archivos y 176 pruebas en verde.
 - `npm run lint`: sin avisos.
 - `npm run typecheck`: correcto con Prisma 6.12.0 y TypeScript.
 - `npm run build`: compilación de producción.

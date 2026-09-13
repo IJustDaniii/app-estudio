@@ -9,7 +9,6 @@ import { redirect } from "next/navigation";
 import { signIn, signOut, requireUserId } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { DEMO_SUBJECTS } from "@/lib/demo-subjects";
-import { GAME_RULES } from "@/lib/config/game";
 import { rewardsForStudyMinutes, taskCompletionReward } from "@/lib/domain/progress";
 import { refreshDailyMissionsForUser } from "@/lib/domain/missions-service";
 import { createStudyStartToken, StudySessionError, validateServerStudySession, verifyStudyStartToken, type StudySessionErrorCode } from "@/lib/domain/study-session";
