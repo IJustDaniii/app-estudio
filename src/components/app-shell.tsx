@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bot, BookOpen, CalendarDays, ChartNoAxesCombined, ClipboardCheck, Clock3, Goal, GraduationCap, LayoutDashboard, LibraryBig, LogOut, Swords } from "lucide-react";
+import { Bot, BookOpen, CalendarDays, ChartNoAxesCombined, ClipboardCheck, Clock3, Goal, GraduationCap, LayoutDashboard, LibraryBig, LogOut, PawPrint, Swords } from "lucide-react";
 import { logoutAction } from "@/app/actions";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 const nav = [
   { href: "/app", label: "Hoy", icon: LayoutDashboard },
   { href: "/app/ai", label: "IA", icon: Bot },
+  { href: "/app/pets", label: "Mascotas", icon: PawPrint },
   { href: "/app/tasks", label: "Tareas", icon: ClipboardCheck },
   { href: "/app/calendar", label: "Calendario", icon: CalendarDays },
   { href: "/app/timetable", label: "Horario", icon: Clock3 },

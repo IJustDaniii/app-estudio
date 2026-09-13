@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ArrowRight, CheckCircle2, Clock3, Coins, Flame, Sparkles, Swords, Trophy } from "lucide-react";
+import Image from "next/image";
+import { ArrowRight, CheckCircle2, Clock3, Coins, Flame, PawPrint, Sparkles, Swords, Trophy } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { TaskRow } from "@/components/task-row";
 import { Badge } from "@/components/ui/badge";
@@ -13,9 +14,9 @@ import { calculateLevel } from "@/lib/domain/progress";
 import { localDayBounds } from "@/lib/domain/dates";
 import { formatDate, minutesLabel } from "@/lib/utils";
 
-export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ minutes?: string }> }) {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ minutes?: string; notice?: string }> }) {
   const data = await getDashboardData();
-  const { minutes } = await searchParams;
+  const { minutes, notice } = await searchParams;
   const available = Math.max(10, Math.min(240, Number(minutes) || 30));
   const recommendation = recommendNextTask(data.tasks.map((task) => ({
     id: task.id, title: task.title, planningMode: task.planningMode, priority: task.priority,
@@ -29,11 +30,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   return <div className="mx-auto max-w-[1500px] space-y-6 px-5 py-6 sm:px-8 lg:px-10 lg:py-9">
     <PageHeader eyebrow={new Intl.DateTimeFormat("es-ES", { weekday: "long", day: "numeric", month: "long" }).format(data.now)} title={`Hola, ${data.user.name.split(" ")[0]}`} description="Esto es lo importante para hoy." />
-    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Resumen diario">
+    {notice && <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm" role="status"><PawPrint className="size-4 text-primary" />{notice === "pet-evolution" ? "Tu mascota ha evolucionado." : notice === "pet-level" ? "Tu mascota ha subido de nivel." : "Progreso académico guardado y mascota actualizada."}</div>}
+    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5" aria-label="Resumen diario">
       <Card><CardContent className="flex items-center gap-3 pt-5"><span className="grid size-9 place-items-center rounded-lg bg-primary/10 text-primary"><Trophy className="size-4" /></span><div><p className="text-xs text-muted-foreground">Nivel {level.level}</p><p className="text-lg font-semibold">{level.currentXp} / {level.nextLevelXp} XP</p></div></CardContent></Card>
       <Card><CardContent className="flex items-center gap-3 pt-5"><span className="grid size-9 place-items-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400"><Coins className="size-4" /></span><div><p className="text-xs text-muted-foreground">Monedas</p><p className="text-lg font-semibold">{data.user.coins}</p></div></CardContent></Card>
       <Card><CardContent className="flex items-center gap-3 pt-5"><span className="grid size-9 place-items-center rounded-lg bg-orange-500/10 text-orange-600 dark:text-orange-400"><Flame className="size-4" /></span><div><p className="text-xs text-muted-foreground">Racha de estudio</p><p className="text-lg font-semibold">{data.streak} días</p></div></CardContent></Card>
       <Card><CardContent className="flex items-center gap-3 pt-5"><span className="grid size-9 place-items-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"><Clock3 className="size-4" /></span><div><p className="text-xs text-muted-foreground">Estudiado hoy</p><p className="text-lg font-semibold">{minutesLabel(data.todayStudyMinutes)}</p></div></CardContent></Card>
+      <Card><CardContent className="flex items-center gap-3 pt-5">{data.activePet ? <Image src={data.activePet.source === "CUSTOM" ? "/api/pets/custom/" + data.activePet.id : data.activePet.evolution?.imagePath ?? data.activePet.species?.imagePath ?? "/pets/cat.svg"} alt="" width={36} height={36} unoptimized={data.activePet.source === "CUSTOM"} className="size-9 rounded-lg object-cover" /> : <span className="grid size-9 place-items-center rounded-lg bg-primary/10 text-primary"><PawPrint className="size-4" /> </span>}<div className="min-w-0"><p className="text-xs text-muted-foreground">Mascota activa</p><p className="truncate text-lg font-semibold">{data.activePet?.name ?? "Sin descubrir"}</p></div></CardContent></Card>
     </section>
 
     <section className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,.75fr)]">

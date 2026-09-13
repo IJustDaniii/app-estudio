@@ -129,3 +129,25 @@ export const studySessionSchema = z
     (data) => data.actualMinutes * 60_000 <= data.endedAt.getTime() - data.startedAt.getTime() + 59_999,
     { message: "La duración registrada supera el tiempo transcurrido", path: ["actualMinutes"] },
   );
+
+const petRequestId = z.string().regex(/^[a-zA-Z0-9:_-]{8,100}$/);
+
+export const petPurchaseSchema = z.object({
+  eggTypeSlug: z.string().regex(/^[a-z0-9-]{2,60}$/),
+  requestId: petRequestId,
+});
+
+export const cosmeticPurchaseSchema = z.object({
+  cosmeticSlug: z.string().regex(/^[a-z0-9-]{2,60}$/),
+  requestId: petRequestId,
+});
+
+export const petIdActionSchema = z.object({
+  petId: z.string().cuid(),
+});
+
+export const eggIdActionSchema = z.object({
+  eggId: z.string().cuid(),
+});
+
+export const customPetNameSchema = z.string().trim().min(1).max(80);

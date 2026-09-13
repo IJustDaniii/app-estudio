@@ -70,65 +70,102 @@ enum AIActionStatus {
   FAILED
 }
 
+enum PetRarity {
+  COMMON
+  UNCOMMON
+  RARE
+  EPIC
+  LEGENDARY
+  MYTHIC
+}
+
+enum UserPetSource {
+  OFFICIAL
+  CUSTOM
+}
+
+enum UserPetStatus {
+  PRESENT
+  TEMPORARILY_AWAY
+}
+
+enum UserEggStatus {
+  AVAILABLE
+  INCUBATING
+  HATCHED
+}
+
+enum CosmeticType {
+  FRAME
+  BADGE
+}
+
 model User {
-  id            String           @id @default(cuid())
-  name          String
-  email         String           @unique
-  passwordHash  String
-  image         String?
-  emailVerified DateTime?
-  timezone      String           @default("Europe/Madrid")
-  xp            Int              @default(0)
-  coins         Int              @default(0)
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
-  subjects      Subject[]
-  timetable     TimetableEntry[]
-  tasks         Task[]
-  bosses        Boss[]
-  grades        Grade[]
-  goals         Goal[]
-  studySessions StudySession[]
-  missions      Mission[]
-  materials     Material[]
-  topics        Topic[]
-  aiSettings    AISettings?
-  aiChats       AIChat[]
-  aiMessages    AIMessage[]
+  id                String             @id @default(cuid())
+  name              String
+  email             String             @unique
+  passwordHash      String
+  image             String?
+  emailVerified     DateTime?
+  timezone          String             @default("Europe/Madrid")
+  xp                Int                @default(0)
+  coins             Int                @default(0)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  subjects          Subject[]
+  timetable         TimetableEntry[]
+  tasks             Task[]
+  bosses            Boss[]
+  grades            Grade[]
+  goals             Goal[]
+  studySessions     StudySession[]
+  missions          Mission[]
+  materials         Material[]
+  topics            Topic[]
+  aiSettings        AISettings?
+  aiChats           AIChat[]
+  aiMessages        AIMessage[]
   aiActionProposals AIActionProposal[]
-  aiAuditLogs   AIAuditLog[]
+  aiAuditLogs       AIAuditLog[]
+  inventory         Inventory?
+  pets              UserPet[]
+  eggs              UserEgg[]
+  shopPurchases     PetShopPurchase[]
+  cosmeticPurchases CosmeticPurchase[]
+  fragments         SpeciesFragment[]
+  cosmetics         UserCosmetic[]
 }
 
 model AISettings {
-  userId                   String         @id
-  user                     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  provider                 AIProviderKind @default(OLLAMA)
-  ollamaUrl                String         @default("http://127.0.0.1:11434")
-  model                    String         @default("qwen3.5:9b")
-  isAIEnabled              Boolean        @default(true)
-  isAcademicContextEnabled Boolean        @default(true)
-  canReadGrades            Boolean        @default(true)
-  canReadTasksAndBosses    Boolean        @default(true)
-  canReadSessionsAndStatistics Boolean    @default(true)
-  canReadSchedule          Boolean        @default(true)
-  canReadMaterials         Boolean        @default(true)
-  canReadGamification      Boolean        @default(true)
-  contextLimit             Int            @default(12000)
-  maxItemsPerCategory      Int            @default(20)
-  createdAt                DateTime       @default(now())
-  updatedAt                DateTime       @updatedAt
+  userId                       String         @id
+  user                         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider                     AIProviderKind @default(OLLAMA)
+  ollamaUrl                    String         @default("http://127.0.0.1:11434")
+  model                        String         @default("qwen3.5:9b")
+  isAIEnabled                  Boolean        @default(true)
+  isAcademicContextEnabled     Boolean        @default(true)
+  canReadGrades                Boolean        @default(true)
+  canReadTasksAndBosses        Boolean        @default(true)
+  canReadSessionsAndStatistics Boolean        @default(true)
+  canReadSchedule              Boolean        @default(true)
+  canReadMaterials             Boolean        @default(true)
+  canReadGamification          Boolean        @default(true)
+  contextLimit                 Int            @default(12000)
+  maxItemsPerCategory          Int            @default(20)
+  createdAt                    DateTime       @default(now())
+  updatedAt                    DateTime       @updatedAt
 }
 
 model AIChat {
-  id        String      @id @default(cuid())
-  title     String      @default("Nuevo chat")
-  userId    String
-  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages  AIMessage[]
+  id              String             @id @default(cuid())
+  title           String             @default("Nuevo chat")
+  userId          String
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages        AIMessage[]
   actionProposals AIActionProposal[]
-  auditLogs AIAuditLog[]
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  auditLogs       AIAuditLog[]
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
 
   @@unique([id, userId])
   @@index([userId, updatedAt])
@@ -142,7 +179,7 @@ model AIMessage {
   model           String?
   errorCode       String?
   contextSnapshot Json?
-  requestId        String?
+  requestId       String?
   inputTokens     Int?
   outputTokens    Int?
   chatId          String
@@ -152,8 +189,8 @@ model AIMessage {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
-  @@index([userId, chatId, createdAt])
   @@unique([userId, requestId])
+  @@index([userId, chatId, createdAt])
 }
 
 model AIActionProposal {
@@ -168,7 +205,7 @@ model AIActionProposal {
   result                Json?
   expiresAt             DateTime
   userId                String
-  user                 User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   chatId                String?
   chat                  AIChat?        @relation(fields: [chatId], references: [id], onDelete: SetNull)
   createdAt             DateTime       @default(now())
@@ -383,4 +420,205 @@ model Material {
   @@index([userId, subjectId])
   @@index([userId, type])
   @@index([userId, isFavorite])
+}
+
+model Inventory {
+  id        String            @id @default(cuid())
+  userId    String            @unique
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eggs      UserEgg[]
+  fragments SpeciesFragment[]
+  cosmetics UserCosmetic[]
+  purchases PetShopPurchase[]
+  cosmeticPurchases CosmeticPurchase[]
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+}
+
+model PetSpecies {
+  id          String            @id @default(cuid())
+  slug        String            @unique
+  name        String
+  description String
+  rarity      PetRarity
+  imagePath   String
+  isOfficial  Boolean           @default(true)
+  pets        UserPet[]
+  evolutions  PetEvolution[]
+  fragments   SpeciesFragment[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([isOfficial, rarity])
+}
+
+model PetEvolution {
+  id        String     @id @default(cuid())
+  speciesId String
+  species   PetSpecies @relation(fields: [speciesId], references: [id], onDelete: Cascade)
+  level     Int
+  name      String
+  imagePath String
+  pets      UserPet[]
+  createdAt DateTime   @default(now())
+
+  @@unique([speciesId, level])
+  @@index([speciesId, level])
+}
+
+model EggType {
+  id            String                 @id @default(cuid())
+  slug          String                 @unique
+  name          String
+  description   String
+  priceCoins    Int
+  incubationXp  Int
+  imagePath     String
+  isAvailable   Boolean                @default(true)
+  probabilities EggRarityProbability[]
+  eggs          UserEgg[]
+  purchases     PetShopPurchase[]
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+}
+
+model EggRarityProbability {
+  id        String    @id @default(cuid())
+  eggTypeId String
+  eggType   EggType   @relation(fields: [eggTypeId], references: [id], onDelete: Cascade)
+  rarity    PetRarity
+  weight    Int
+
+  @@unique([eggTypeId, rarity])
+  @@index([eggTypeId, weight])
+}
+
+model UserEgg {
+  id                   String           @id @default(cuid())
+  userId               String
+  user                 User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  inventoryId          String
+  inventory            Inventory        @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  eggTypeId            String
+  eggType              EggType          @relation(fields: [eggTypeId], references: [id], onDelete: Restrict)
+  status               UserEggStatus    @default(AVAILABLE)
+  incubationXp         Int              @default(0)
+  incubationRequiredXp Int
+  purchasedAt          DateTime         @default(now())
+  incubationStartedAt  DateTime?
+  hatchedAt            DateTime?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  purchase             PetShopPurchase?
+
+  @@index([userId, status])
+  @@index([inventoryId, status])
+}
+
+model PetShopPurchase {
+  id          String    @id @default(cuid())
+  requestId   String
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  inventoryId String
+  inventory   Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  eggTypeId   String
+  eggType     EggType   @relation(fields: [eggTypeId], references: [id], onDelete: Restrict)
+  userEggId   String    @unique
+  userEgg     UserEgg   @relation(fields: [userEggId], references: [id], onDelete: Restrict)
+  priceCoins  Int
+  createdAt   DateTime  @default(now())
+
+  @@unique([userId, requestId])
+  @@index([userId, createdAt])
+}
+
+model UserPet {
+  id                   String        @id @default(cuid())
+  userId               String
+  user                 User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  source               UserPetSource
+  name                 String
+  speciesId            String?
+  species              PetSpecies?   @relation(fields: [speciesId], references: [id], onDelete: SetNull)
+  rarity               PetRarity?
+  level                Int           @default(1)
+  xp                   Int           @default(0)
+  happiness            Int           @default(80)
+  status               UserPetStatus @default(PRESENT)
+  evolutionId          String?
+  evolution            PetEvolution? @relation(fields: [evolutionId], references: [id], onDelete: SetNull)
+  customImagePath      String?
+  customImageMimeType  String?
+  isActive             Boolean       @default(false)
+  obtainedAt           DateTime      @default(now())
+  lastAcademicActivity DateTime?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  @@index([userId, source])
+  @@index([userId, isActive])
+  @@index([speciesId])
+}
+
+model SpeciesFragment {
+  id          String     @id @default(cuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  inventoryId String
+  inventory   Inventory  @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  speciesId   String
+  species     PetSpecies @relation(fields: [speciesId], references: [id], onDelete: Cascade)
+  quantity    Int        @default(0)
+  updatedAt   DateTime   @updatedAt
+
+  @@unique([inventoryId, speciesId])
+  @@index([userId, speciesId])
+}
+
+model Cosmetic {
+  id          String         @id @default(cuid())
+  slug        String         @unique
+  name        String
+  description String
+  type        CosmeticType
+  priceCoins  Int
+  imagePath   String
+  isAvailable Boolean        @default(true)
+  owners      UserCosmetic[]
+  purchases   CosmeticPurchase[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+model UserCosmetic {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  inventoryId String
+  inventory   Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  cosmeticId  String
+  cosmetic    Cosmetic  @relation(fields: [cosmeticId], references: [id], onDelete: Restrict)
+  quantity    Int       @default(1)
+  acquiredAt  DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([inventoryId, cosmeticId])
+  @@index([userId, cosmeticId])
+}
+
+model CosmeticPurchase {
+  id          String    @id @default(cuid())
+  requestId   String
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  inventoryId String
+  inventory   Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  cosmeticId  String
+  cosmetic    Cosmetic  @relation(fields: [cosmeticId], references: [id], onDelete: Restrict)
+  priceCoins  Int
+  createdAt   DateTime  @default(now())
+
+  @@unique([userId, requestId])
+  @@index([userId, createdAt])
 }

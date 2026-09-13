@@ -14,7 +14,7 @@ PWA instalable de organización académica gamificada para un estudiante de 1.º
 - XP, nivel, monedas, racha, misiones diarias y estadísticas básicas.
 - PWA instalable con shell y pantalla offline disponibles sin red.
 
-Fuera de alcance: mascotas, tienda avanzada, cofres, rangos competitivos, temporadas, Teams, funciones sociales, flashcards e integraciones externas. La IA local inicial queda incluida en la sección siguiente; no incluye las funciones avanzadas listadas fuera de alcance.
+Fuera de alcance: tienda avanzada, cofres, rangos competitivos, temporadas, Teams, funciones sociales, flashcards e integraciones externas. La Fase 3 inicial incluye mascotas, huevos, tienda básica y cosméticos simples; no incluye las funciones avanzadas listadas fuera de alcance. La IA local inicial queda incluida en la sección siguiente.
 
 ### IA local inicial
 

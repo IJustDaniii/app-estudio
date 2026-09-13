@@ -10,6 +10,8 @@ import { DEMO_SUBJECTS } from "@/lib/demo-subjects";
 import { GAME_RULES } from "@/lib/config/game";
 import { dateOnlyForLocalDay, localDayBounds } from "@/lib/domain/dates";
 import { rewardsForStudyMinutes } from "@/lib/domain/progress";
+import { PET_RARITY_CONFIG } from "@/lib/pets/config";
+import { applyAcademicPetProgress, hatchEggForUser, purchaseCosmeticForUser, purchaseEggForUser, setActivePetForUser, startEggIncubationForUser } from "@/lib/pets/service";
 import {
   bossSchema,
   goalSchema,
@@ -21,9 +23,14 @@ import {
   taskSchema,
   timetableSchema,
   topicSchema,
+  cosmeticPurchaseSchema,
+  eggIdActionSchema,
+  petIdActionSchema,
+  petPurchaseSchema,
 } from "@/lib/validation";
 
 export type AuthFormState = { error?: string } | undefined;
+export type PetActionState = { error?: string; success?: string };
 
 function formObject(formData: FormData) {
   return Object.fromEntries(formData.entries());
@@ -123,14 +130,18 @@ export async function createTask(formData: FormData) {
 export async function completeTask(formData: FormData) {
   const userId = await requireUserId();
   const id = String(formData.get("id") ?? "");
-  const task = await prisma.task.findFirst({ where: { id, userId }, select: { status: true } });
-  if (!task || task.status === "COMPLETED") return;
-  await prisma.$transaction([
-    prisma.task.update({ where: { id }, data: { status: "COMPLETED", completedAt: new Date() } }),
-    prisma.user.update({ where: { id: userId }, data: { xp: { increment: GAME_RULES.taskCompletionXp }, coins: { increment: GAME_RULES.taskCompletionCoins } } }),
-  ]);
+  const completed = await prisma.$transaction(async (tx) => {
+    const task = await tx.task.updateMany({ where: { id, userId, status: { not: "COMPLETED" } }, data: { status: "COMPLETED", completedAt: new Date() } });
+    if (task.count !== 1) return null;
+    await tx.user.update({ where: { id: userId }, data: { xp: { increment: GAME_RULES.taskCompletionXp }, coins: { increment: GAME_RULES.taskCompletionCoins } } });
+    return applyAcademicPetProgress(tx, userId, GAME_RULES.taskCompletionXp);
+  }, { isolationLevel: "Serializable" });
+  if (!completed) return;
   await refreshDailyMissions(userId);
   revalidatePath("/app");
+  revalidatePath("/app/pets");
+  if (completed.evolved) redirect("/app?notice=pet-evolution");
+  if (completed.leveledUp) redirect("/app?notice=pet-level");
 }
 
 export async function deleteTask(formData: FormData) {
@@ -194,32 +205,116 @@ export async function recordStudySession(formData: FormData) {
   let taskId = data.taskId;
   if (taskId && !(await prisma.task.findFirst({ where: { id: taskId, userId }, select: { id: true } }))) taskId = null;
   const reward = rewardsForStudyMinutes(data.actualMinutes);
-  await prisma.$transaction([
-    prisma.studySession.create({ data: { ...data, subjectId, taskId, userId } }),
-    prisma.user.update({ where: { id: userId }, data: { xp: { increment: reward.xp }, coins: { increment: reward.coins } } }),
-  ]);
+  const petProgress = await prisma.$transaction(async (tx) => {
+    await tx.studySession.create({ data: { ...data, subjectId, taskId, userId } });
+    await tx.user.update({ where: { id: userId }, data: { xp: { increment: reward.xp }, coins: { increment: reward.coins } } });
+    return applyAcademicPetProgress(tx, userId, reward.xp);
+  }, { isolationLevel: "Serializable" });
   await refreshDailyMissions(userId);
-  redirect("/app");
+  redirect("/app?notice=" + (petProgress.evolved ? "pet-evolution" : petProgress.leveledUp ? "pet-level" : "study-reward"));
 }
 
 export async function refreshDailyMissions(userId: string) {
   const { start, end } = localDayBounds();
   const missionDate = dateOnlyForLocalDay(start);
-  await prisma.$transaction(
-    GAME_RULES.dailyMissions.map((mission) =>
-      prisma.mission.upsert({
+  await prisma.$transaction(async (tx) => {
+    for (const mission of GAME_RULES.dailyMissions) {
+      await tx.mission.upsert({
         where: { userId_date_metric: { userId, date: missionDate, metric: mission.metric } },
         update: {},
         create: { ...mission, userId, date: missionDate },
-      }),
-    ),
-  );
-  const [minutes, completed] = await Promise.all([
-    prisma.studySession.aggregate({ where: { userId, startedAt: { gte: start, lt: end } }, _sum: { actualMinutes: true } }),
-    prisma.task.count({ where: { userId, completedAt: { gte: start, lt: end } } }),
-  ]);
-  await Promise.all([
-    prisma.mission.updateMany({ where: { userId, date: missionDate, metric: "STUDY_MINUTES" }, data: { progress: minutes._sum.actualMinutes ?? 0, isComplete: (minutes._sum.actualMinutes ?? 0) >= GAME_RULES.dailyMissions[0].target } }),
-    prisma.mission.updateMany({ where: { userId, date: missionDate, metric: "TASKS_COMPLETED" }, data: { progress: completed, isComplete: completed >= GAME_RULES.dailyMissions[1].target } }),
-  ]);
+      });
+    }
+    const [minutes, completed] = await Promise.all([
+      tx.studySession.aggregate({ where: { userId, startedAt: { gte: start, lt: end } }, _sum: { actualMinutes: true } }),
+      tx.task.count({ where: { userId, completedAt: { gte: start, lt: end } } }),
+    ]);
+    const progressByMetric = { STUDY_MINUTES: minutes._sum.actualMinutes ?? 0, TASKS_COMPLETED: completed };
+    for (const mission of GAME_RULES.dailyMissions) {
+      const current = await tx.mission.findUniqueOrThrow({ where: { userId_date_metric: { userId, date: missionDate, metric: mission.metric } } });
+      const progress = progressByMetric[mission.metric];
+      const becameComplete = !current.isComplete && progress >= current.target;
+      await tx.mission.update({ where: { id: current.id }, data: { progress, isComplete: current.isComplete || becameComplete } });
+      if (becameComplete) await applyAcademicPetProgress(tx, userId, current.rewardXp);
+    }
+  }, { isolationLevel: "Serializable" });
+}
+
+function petActionError(error: unknown) {
+  const code = error instanceof Error ? error.message : "";
+  return {
+    error: ({
+      FORBIDDEN: "No se ha encontrado esta mascota.",
+      INSUFFICIENT_COINS: "No tienes suficientes monedas.",
+      EGG_NOT_AVAILABLE: "Ese huevo ya no está disponible para incubar.",
+      EGG_NOT_READY: "El huevo todavía necesita más XP académico.",
+      COSMETIC_NOT_AVAILABLE: "Ese cosmético ya no está disponible.",
+      IDEMPOTENCY_CONFLICT: "La operación ya existe con otros datos.",
+      INVALID_REQUEST_ID: "No se pudo validar la operación. Inténtalo de nuevo.",
+    } as Record<string, string>)[code] ?? "No se pudo completar la operación.",
+  };
+}
+
+export async function purchaseEggAction(_state: PetActionState, formData: FormData): Promise<PetActionState> {
+  const userId = await requireUserId();
+  try {
+    const data = petPurchaseSchema.parse(Object.fromEntries(formData.entries()));
+    const result = await purchaseEggForUser(userId, data.eggTypeSlug, data.requestId);
+    revalidatePath("/app");
+    revalidatePath("/app/pets");
+    return { success: result.duplicate ? "La compra ya estaba aplicada." : "Huevo añadido al inventario." };
+  } catch (error) {
+    return petActionError(error);
+  }
+}
+
+export async function startEggIncubationAction(_state: PetActionState, formData: FormData): Promise<PetActionState> {
+  const userId = await requireUserId();
+  try {
+    const { eggId } = eggIdActionSchema.parse(Object.fromEntries(formData.entries()));
+    await startEggIncubationForUser(userId, eggId);
+    revalidatePath("/app/pets");
+    return { success: "Incubación iniciada. El XP académico hará el resto." };
+  } catch (error) {
+    return petActionError(error);
+  }
+}
+
+export async function hatchEggAction(_state: PetActionState, formData: FormData): Promise<PetActionState> {
+  const userId = await requireUserId();
+  try {
+    const { eggId } = eggIdActionSchema.parse(Object.fromEntries(formData.entries()));
+    const result = await hatchEggForUser(userId, eggId);
+    revalidatePath("/app");
+    revalidatePath("/app/pets");
+    return { success: result.duplicate ? "Duplicado convertido en " + result.fragmentQuantity + " fragmento." : result.speciesName + " ha eclosionado · " + PET_RARITY_CONFIG[result.rarity].label + "." };
+  } catch (error) {
+    return petActionError(error);
+  }
+}
+
+export async function setActivePetAction(_state: PetActionState, formData: FormData): Promise<PetActionState> {
+  const userId = await requireUserId();
+  try {
+    const { petId } = petIdActionSchema.parse(Object.fromEntries(formData.entries()));
+    await setActivePetForUser(userId, petId);
+    revalidatePath("/app");
+    revalidatePath("/app/pets");
+    revalidatePath("/app/account");
+    return { success: "Mascota activa actualizada." };
+  } catch (error) {
+    return petActionError(error);
+  }
+}
+
+export async function purchaseCosmeticAction(_state: PetActionState, formData: FormData): Promise<PetActionState> {
+  const userId = await requireUserId();
+  try {
+    const data = cosmeticPurchaseSchema.parse(Object.fromEntries(formData.entries()));
+    const result = await purchaseCosmeticForUser(userId, data.cosmeticSlug, data.requestId);
+    revalidatePath("/app/pets");
+    return { success: result.duplicate ? "La compra ya estaba aplicada." : "Cosmético añadido al inventario." };
+  } catch (error) {
+    return petActionError(error);
+  }
 }

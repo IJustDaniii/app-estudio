@@ -12,7 +12,7 @@ export async function getDashboardData() {
   const missionDate = dateOnlyForLocalDay(now);
   await refreshDailyMissions(userId);
 
-  const [user, tasks, nextBoss, todayStudy, todayCompleted, missions, sessionDates] = await Promise.all([
+  const [user, tasks, nextBoss, todayStudy, todayCompleted, missions, sessionDates, activePet] = await Promise.all([
     prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { name: true, xp: true, coins: true } }),
     prisma.task.findMany({ where: { userId, status: { not: "COMPLETED" } }, orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }], include: { subject: { include: { bosses: { where: { date: { gte: now } }, orderBy: { date: "asc" }, take: 1 } } } } }),
     prisma.boss.findFirst({ where: { userId, date: { gte: now } }, orderBy: { date: "asc" }, include: { subject: true } }),
@@ -20,6 +20,7 @@ export async function getDashboardData() {
     prisma.task.count({ where: { userId, completedAt: { gte: start, lt: end } } }),
     prisma.mission.findMany({ where: { userId, date: missionDate }, orderBy: { metric: "asc" } }),
     prisma.studySession.findMany({ where: { userId }, select: { startedAt: true }, orderBy: { startedAt: "desc" }, take: 90 }),
+    prisma.userPet.findFirst({ where: { userId, isActive: true, status: "PRESENT" }, include: { species: true, evolution: true } }),
   ]);
 
   return {
@@ -29,6 +30,7 @@ export async function getDashboardData() {
     todayStudyMinutes: todayStudy._sum.actualMinutes ?? 0,
     todayCompleted,
     missions,
+    activePet,
     streak: calculateStudyStreak(sessionDates.map((session) => session.startedAt), now),
     now,
   };

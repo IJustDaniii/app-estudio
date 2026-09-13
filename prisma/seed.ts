@@ -2,6 +2,7 @@ import "dotenv/config";
 import { hash } from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 import { DEMO_SUBJECTS } from "../src/lib/demo-subjects";
+import { PET_RULES, PET_SHOP_CONFIG, PET_SPECIES_CONFIG } from "../src/lib/pets/config";
 
 const prisma = new PrismaClient();
 
@@ -10,6 +11,46 @@ function atDayOffset(days: number, hour = 9) {
   date.setDate(date.getDate() + days);
   date.setHours(hour, 0, 0, 0);
   return date;
+}
+
+async function seedPetCatalog() {
+  for (const species of PET_SPECIES_CONFIG) {
+    const createdSpecies = await prisma.petSpecies.upsert({
+      where: { slug: species.slug },
+      update: { name: species.name, description: species.description, rarity: species.rarity, imagePath: species.imagePath, isOfficial: true },
+      create: { ...species, isOfficial: true },
+    });
+    for (const [index, level] of PET_RULES.evolutionLevels.entries()) {
+      await prisma.petEvolution.upsert({
+        where: { speciesId_level: { speciesId: createdSpecies.id, level } },
+        update: { name: species.name + " · Etapa " + (index + 1), imagePath: species.imagePath },
+        create: { speciesId: createdSpecies.id, level, name: species.name + " · Etapa " + (index + 1), imagePath: species.imagePath },
+      });
+    }
+  }
+
+  for (const egg of PET_SHOP_CONFIG.eggTypes) {
+    const createdEgg = await prisma.eggType.upsert({
+      where: { slug: egg.slug },
+      update: { name: egg.name, description: egg.description, priceCoins: egg.priceCoins, incubationXp: egg.incubationXp, imagePath: egg.imagePath, isAvailable: true },
+      create: { slug: egg.slug, name: egg.name, description: egg.description, priceCoins: egg.priceCoins, incubationXp: egg.incubationXp, imagePath: egg.imagePath },
+    });
+    for (const rarity of Object.keys(egg.probabilities) as Array<keyof typeof egg.probabilities>) {
+      await prisma.eggRarityProbability.upsert({
+        where: { eggTypeId_rarity: { eggTypeId: createdEgg.id, rarity } },
+        update: { weight: egg.probabilities[rarity] },
+        create: { eggTypeId: createdEgg.id, rarity, weight: egg.probabilities[rarity] },
+      });
+    }
+  }
+
+  for (const cosmetic of PET_SHOP_CONFIG.cosmetics) {
+    await prisma.cosmetic.upsert({
+      where: { slug: cosmetic.slug },
+      update: { name: cosmetic.name, description: cosmetic.description, type: cosmetic.type, priceCoins: cosmetic.priceCoins, imagePath: cosmetic.imagePath, isAvailable: true },
+      create: cosmetic,
+    });
+  }
 }
 
 async function main() {
@@ -33,6 +74,8 @@ async function main() {
     ),
   );
 
+  await seedPetCatalog();
+  await prisma.inventory.upsert({ where: { userId: user.id }, update: {}, create: { userId: user.id } });
   if ((await prisma.task.count({ where: { userId: user.id } })) > 0) return;
   const subjects = await prisma.subject.findMany({ where: { userId: user.id } });
   const byName = Object.fromEntries(subjects.map((subject) => [subject.name, subject.id]));
