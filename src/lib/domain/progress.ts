@@ -18,6 +18,10 @@ export function rewardsForStudyMinutes(minutes: number) {
   };
 }
 
+export function taskCompletionReward() {
+  return { xp: GAME_RULES.taskCompletionXp, coins: GAME_RULES.taskCompletionCoins };
+}
+
 export function calculateStudyStreak(dates: Date[], now = new Date(), timeZone = DEFAULT_TIME_ZONE) {
   const studied = new Set(dates.map((date) => zonedDateKey(date, timeZone)));
   const cursor = new Date(`${zonedDateKey(now, timeZone)}T00:00:00Z`);
