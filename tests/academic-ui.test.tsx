@@ -8,6 +8,7 @@ import { BossEditor } from "@/components/boss-editor";
 import { GradeCalculator } from "@/components/grade-calculator";
 import { GradeEditor } from "@/components/grade-editor";
 import { GoalEditor } from "@/components/goal-editor";
+import { TimetableChangeEditor } from "@/components/timetable-change-editor";
 
 describe("interfaz del nucleo academico", () => {
   it("renderiza un icono del catalogo sin insertar texto como marcado", () => {
@@ -74,5 +75,17 @@ describe("interfaz del nucleo academico", () => {
     expect(markup).toContain("name=\"subjectId\"");
     expect(markup).toContain("name=\"progress\"");
     expect(markup).toContain("value=\"40\"");
+  });
+
+  it("permite guardar un cambio puntual del horario o una cancelación", () => {
+    const markup = renderToStaticMarkup(createElement(TimetableChangeEditor, {
+      action: () => undefined,
+      change: { id: "cm12345678901234567890123", baseEntryId: "cm12345678901234567890125", subjectId: "cm12345678901234567890124", date: new Date("2026-10-05"), startTime: "10:00", endTime: "11:00", room: "Aula 3", isCancelled: false },
+      subjects: [{ id: "cm12345678901234567890124", name: "Historia" }],
+      entries: [{ id: "cm12345678901234567890125", label: "Historia · Lunes 10:00" }],
+    }));
+    expect(markup).toMatch(/cambio puntual/i);
+    expect(markup).toContain("name=\"isCancelled\"");
+    expect(markup).toContain("Aula 3");
   });
 });

@@ -168,6 +168,7 @@ export async function createTimetableEntry(formData: FormData) {
   await ensureOwnedSubject(userId, data.subjectId);
   await prisma.timetableEntry.create({ data: { ...data, userId } });
   revalidatePath("/app/timetable");
+  revalidatePath("/app");
 }
 
 export async function createTimetableChange(formData: FormData) {
@@ -176,8 +177,9 @@ export async function createTimetableChange(formData: FormData) {
   const { id: _id, ...changeData } = data;
   void _id;
   await ensureOwnedSubject(userId, changeData.subjectId);
-  if (changeData.baseEntryId && !(await prisma.timetableEntry.findFirst({ where: { id: changeData.baseEntryId, userId }, select: { id: true } }))) {
-    throw new Error("INVALID_TIMETABLE_ENTRY");
+  if (changeData.baseEntryId) {
+    const baseEntry = await prisma.timetableEntry.findFirst({ where: { id: changeData.baseEntryId, userId }, select: { id: true, subjectId: true } });
+    if (!baseEntry || baseEntry.subjectId !== changeData.subjectId) throw new Error("INVALID_TIMETABLE_ENTRY");
   }
   await prisma.timetableChange.create({ data: { ...changeData, userId } });
   revalidatePath("/app/timetable");
@@ -191,8 +193,9 @@ export async function updateTimetableChange(formData: FormData) {
   const { id: _ignoredId, ...changeData } = data;
   void _ignoredId;
   await ensureOwnedSubject(userId, changeData.subjectId);
-  if (changeData.baseEntryId && !(await prisma.timetableEntry.findFirst({ where: { id: changeData.baseEntryId, userId }, select: { id: true } }))) {
-    throw new Error("INVALID_TIMETABLE_ENTRY");
+  if (changeData.baseEntryId) {
+    const baseEntry = await prisma.timetableEntry.findFirst({ where: { id: changeData.baseEntryId, userId }, select: { id: true, subjectId: true } });
+    if (!baseEntry || baseEntry.subjectId !== changeData.subjectId) throw new Error("INVALID_TIMETABLE_ENTRY");
   }
   await prisma.timetableChange.updateMany({ where: { id, userId }, data: changeData });
   revalidatePath("/app/timetable");
@@ -214,12 +217,14 @@ export async function updateTimetableEntry(formData: FormData) {
   await ensureOwnedSubject(userId, data.subjectId);
   await prisma.timetableEntry.updateMany({ where: { id, userId }, data });
   revalidatePath("/app/timetable");
+  revalidatePath("/app");
 }
 
 export async function deleteTimetableEntry(formData: FormData) {
   const userId = await requireUserId();
   await prisma.timetableEntry.deleteMany({ where: { id: String(formData.get("id") ?? ""), userId } });
   revalidatePath("/app/timetable");
+  revalidatePath("/app");
 }
 
 export async function createTask(formData: FormData) {
