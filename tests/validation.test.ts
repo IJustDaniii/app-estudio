@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bossSchema, goalProgressSchema, goalSchema, gradeSchema, registerSchema, subjectSchema, studySessionSchema, taskSchema, timetableChangeSchema } from "@/lib/validation";
+import { bossSchema, goalProgressSchema, goalSchema, gradeSchema, registerSchema, subjectSchema, studySessionSchema, taskSchema, timeZoneSchema, timetableChangeSchema } from "@/lib/validation";
 
 describe("validación de cuenta", () => {
   it("exige una contraseña suficientemente robusta", () => {
@@ -45,6 +45,11 @@ describe("validación del núcleo académico", () => {
 
   it("valida un cambio puntual de horario", () => {
     expect(timetableChangeSchema.safeParse({ baseEntryId: subjectId, subjectId, date: "2026-09-15", startTime: "09:00", endTime: "10:00", room: "Aula 4", isCancelled: "false" }).success).toBe(true);
+  });
+
+  it("solo permite zonas horarias configuradas", () => {
+    expect(timeZoneSchema.safeParse("Europe/Madrid").success).toBe(true);
+    expect(timeZoneSchema.safeParse("Zona/Inventada").success).toBe(false);
   });
 });
 

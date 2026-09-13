@@ -12,6 +12,19 @@ export function dateOnlyForLocalDay(date = new Date()) {
 
 export const DEFAULT_TIME_ZONE = "Europe/Madrid";
 
+export const SUPPORTED_TIME_ZONES = ["Europe/Madrid", "Atlantic/Canary", "Europe/London", "Europe/Paris", "America/New_York", "America/Mexico_City", "America/Argentina/Buenos_Aires", "UTC", "Asia/Tokyo"] as const;
+export const TIME_ZONE_OPTIONS = [
+  { value: "Europe/Madrid", label: "Madrid (España)" },
+  { value: "Atlantic/Canary", label: "Canarias (España)" },
+  { value: "Europe/London", label: "Londres (Reino Unido)" },
+  { value: "Europe/Paris", label: "París (Francia)" },
+  { value: "America/New_York", label: "Nueva York (EE. UU.)" },
+  { value: "America/Mexico_City", label: "Ciudad de México" },
+  { value: "America/Argentina/Buenos_Aires", label: "Buenos Aires (Argentina)" },
+  { value: "UTC", label: "UTC" },
+  { value: "Asia/Tokyo", label: "Tokio (Japón)" },
+] as const;
+
 export function normalizeTimeZone(timeZone?: string) {
   if (!timeZone) return DEFAULT_TIME_ZONE;
   try {

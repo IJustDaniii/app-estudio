@@ -27,6 +27,7 @@ import {
   studySessionStartSchema,
   subjectSchema,
   taskSchema,
+  timeZoneSchema,
   timetableSchema,
   timetableChangeSchema,
   topicSchema,
@@ -109,6 +110,15 @@ export async function registerAction(_state: AuthFormState, formData: FormData):
 
 export async function logoutAction() {
   await signOut({ redirectTo: "/login" });
+}
+
+export async function updateTimeZone(formData: FormData) {
+  const userId = await requireUserId();
+  const timeZone = timeZoneSchema.parse(String(formData.get("timeZone") ?? ""));
+  await prisma.user.updateMany({ where: { id: userId }, data: { timezone: timeZone } });
+  revalidatePath("/app");
+  revalidatePath("/app/calendar");
+  revalidatePath("/app/account");
 }
 
 export async function createSubject(formData: FormData) {

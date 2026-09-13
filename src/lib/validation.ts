@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MAX_STUDY_SESSION_MINUTES, MIN_STUDY_SESSION_MINUTES } from "@/lib/domain/study-session";
+import { SUPPORTED_TIME_ZONES } from "@/lib/domain/dates";
 
 const emptyToNullDate = z.preprocess((value) => (value === "" ? null : value), z.coerce.date().nullable());
 const optionalId = z.preprocess((value) => (value === "" ? null : value), z.string().cuid().nullable());
@@ -111,6 +112,8 @@ export const bossSchema = z.object({
   actualGrade: z.preprocess((value) => (value === "" ? null : value), z.coerce.number().min(0).max(10).nullable()),
   status: z.enum(["UPCOMING", "PREPARED", "COMPLETED"]).default("UPCOMING"),
 });
+
+export const timeZoneSchema = z.enum(SUPPORTED_TIME_ZONES);
 
 export const gradeSchema = z.object({
   label: requiredText(100),
