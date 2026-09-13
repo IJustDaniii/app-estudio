@@ -1,26 +1,9 @@
-import { Prisma } from "@prisma/client";
 import { GAME_RULES } from "@/lib/config/game";
 import { normalizeTimeZone, zonedDateKey, zonedDayRange } from "@/lib/domain/dates";
 import { updateMissionProgress } from "@/lib/domain/missions";
+import { withSerializableRetry } from "@/lib/domain/transactions";
 import { applyAcademicPetProgress } from "@/lib/pets/service";
 import { prisma } from "@/lib/prisma";
-
-function isSerializationConflict(error: unknown) {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
-}
-
-async function withSerializableRetry<T>(operation: () => Promise<T>) {
-  let lastError: unknown;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      return await operation();
-    } catch (error) {
-      lastError = error;
-      if (!isSerializationConflict(error)) throw error;
-    }
-  }
-  throw lastError;
-}
 
 /** Refreshes today's missions and pays each newly completed mission in the same transaction. */
 export async function refreshDailyMissionsForUser(userId: string, now = new Date()) {

@@ -13,6 +13,7 @@ import { GAME_RULES } from "@/lib/config/game";
 import { rewardsForStudyMinutes } from "@/lib/domain/progress";
 import { refreshDailyMissionsForUser } from "@/lib/domain/missions-service";
 import { createStudyStartToken, StudySessionError, validateServerStudySession, verifyStudyStartToken, type StudySessionErrorCode } from "@/lib/domain/study-session";
+import { withSerializableRetry } from "@/lib/domain/transactions";
 import { PET_RARITY_CONFIG } from "@/lib/pets/config";
 import { applyAcademicPetProgress, hatchEggForUser, purchaseCosmeticForUser, purchaseEggForUser, setActivePetForUser, startEggIncubationForUser } from "@/lib/pets/service";
 import {
@@ -164,12 +165,12 @@ export async function createTask(formData: FormData) {
 export async function completeTask(formData: FormData) {
   const userId = await requireUserId();
   const id = String(formData.get("id") ?? "");
-  const completed = await prisma.$transaction(async (tx) => {
+  const completed = await withSerializableRetry(() => prisma.$transaction(async (tx) => {
     const task = await tx.task.updateMany({ where: { id, userId, status: { not: "COMPLETED" } }, data: { status: "COMPLETED", completedAt: new Date() } });
     if (task.count !== 1) return null;
     await tx.user.update({ where: { id: userId }, data: { xp: { increment: GAME_RULES.taskCompletionXp }, coins: { increment: GAME_RULES.taskCompletionCoins } } });
     return applyAcademicPetProgress(tx, userId, GAME_RULES.taskCompletionXp);
-  }, { isolationLevel: "Serializable" });
+  }, { isolationLevel: "Serializable" }));
   if (!completed) return;
   await refreshDailyMissionsForUser(userId);
   revalidatePath("/app");
@@ -264,11 +265,11 @@ export async function recordStudySession(_state: StudySessionActionState, formDa
   if (taskId && !(await prisma.task.findFirst({ where: { id: taskId, userId }, select: { id: true } }))) taskId = null;
   const reward = rewardsForStudyMinutes(sessionData.actualMinutes);
   try {
-    const petProgress = await prisma.$transaction(async (tx) => {
+    const petProgress = await withSerializableRetry(() => prisma.$transaction(async (tx) => {
       await tx.studySession.create({ data: { ...sessionData, requestId: data.requestId, subjectId, taskId, userId } });
       await tx.user.update({ where: { id: userId }, data: { xp: { increment: reward.xp }, coins: { increment: reward.coins } } });
       return applyAcademicPetProgress(tx, userId, reward.xp);
-    }, { isolationLevel: "Serializable" });
+    }, { isolationLevel: "Serializable" }));
     await refreshDailyMissionsForUser(userId);
     redirect("/app?notice=" + (petProgress.evolved ? "pet-evolution" : petProgress.leveledUp ? "pet-level" : "study-reward"));
   } catch (error) {
