@@ -15,6 +15,8 @@ El contexto académico se construye de forma explícita desde el selector del ch
 
 Las herramientas disponibles para el modelo son de solo lectura (asignaturas, tareas, Bosses y notas). La capa de propuestas para futuras acciones de escritura exige confirmación y no ejecuta cambios en esta fase.
 
+Las respuestas del asistente se muestran con Markdown seguro: negrita, cursiva, títulos, listas, tablas, bloques de código, enlaces y fórmulas matemáticas/químicas como `$CO_2$`. El HTML crudo se omite.
+
 Referencias del proveedor: [API de chat de Ollama](https://docs.ollama.com/api/chat), [streaming](https://docs.ollama.com/capabilities/streaming), [visión](https://docs.ollama.com/capabilities/vision) y [detalles de modelos](https://docs.ollama.com/api-reference/show-model-details).
 
 ## Materiales y archivos académicos
