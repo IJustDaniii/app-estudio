@@ -5,4 +5,4 @@
 - [x] Recompensas de misiones y sesiones seguras frente a reintentos.
 - [x] Documentación, ADR y notas del parche actualizados.
 - [x] Tests, lint, tipos, build, Prisma y auditoría pasan.
-- [ ] Commit en `main` y subida a `origin/main` confirmados.
+- [x] Commit en `main` y subida a `origin/main` confirmados.
