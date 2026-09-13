@@ -8,6 +8,7 @@ export const metadata: Metadata = {
   description: "Organización académica para 1.º de Bachillerato",
   applicationName: "Aula 1B",
   manifest: "/manifest.webmanifest",
+  icons: { icon: "/icon.svg", apple: "/icon-192.png" },
   appleWebApp: { capable: true, title: "Aula 1B", statusBarStyle: "default" },
 };
 

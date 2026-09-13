@@ -3,6 +3,7 @@
 ## Añadido
 
 - Inicio de las sesiones firmado por el servidor, con identificador único por operación.
+- Icono de la aplicación declarado para que la carga no genere un 404 del navegador.
 - Reglas actuales de XP, monedas, niveles, rachas y misiones documentadas en un único lugar.
 - Pruebas de misiones, sesiones, reintentos, errores y límites.
 
