@@ -1,12 +1,13 @@
 import type { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
 import { AIProviderError } from "@/lib/ai/errors";
-import { streamAIResponse } from "@/lib/ai/chat";
+import { imagesForModel, streamAIResponse } from "@/lib/ai/chat";
 import { buildAcademicContext } from "@/lib/ai/context";
-import { aiApiError, apiUserId, parseAIJson } from "@/lib/ai/http";
+import { aiApiError, aiRateLimitError, apiUserId, parseAIJson } from "@/lib/ai/http";
 import { getAIProvider } from "@/lib/ai/providers";
-import { academicContextRepository, getAISettings, scopedReadOnlyToolRepository } from "@/lib/ai/repository";
-import { chatIdSchema, defaultChatTitle, sendMessageSchema } from "@/lib/ai/validation";
+import { checkAIRateLimit } from "@/lib/ai/rate-limit";
+import { academicContextRepository, emptyReadOnlyToolRepository, getAISettings, scopedReadOnlyToolRepository } from "@/lib/ai/repository";
+import { chatIdSchema, defaultChatTitle, effectiveContextSelection, sendMessageSchema } from "@/lib/ai/validation";
 import { getStorageProvider } from "@/lib/materials/storage";
 import { prisma } from "@/lib/prisma";
 
@@ -27,6 +28,8 @@ function streamLine(value: unknown) {
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const userId = await apiUserId();
   if (!userId) return aiApiError("UNAUTHORIZED", "No autorizado", 401);
+  const rate = checkAIRateLimit(`messages:send:${userId}`, 12);
+  if (!rate.allowed) return aiRateLimitError(rate.retryAfterSeconds);
   const chatId = chatIdSchema.safeParse((await context.params).id).data;
   if (!chatId) return aiApiError("NOT_FOUND", "Chat no encontrado", 404);
 
@@ -37,6 +40,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       getAISettings(userId),
     ]);
     if (!chat) return aiApiError("NOT_FOUND", "Chat no encontrado", 404);
+    const selection = effectiveContextSelection(settings.isAcademicContextEnabled, data.context);
 
     const [historyDesc, academicContext] = await Promise.all([
       prisma.aIMessage.findMany({ where: { chatId, userId, status: "COMPLETE" }, select: { role: true, content: true }, orderBy: { createdAt: "desc" }, take: 40 }),
@@ -44,13 +48,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         userId,
         isEnabled: settings.isAcademicContextEnabled,
         maxCharacters: settings.contextLimit,
-        selection: data.context,
+        selection,
         repository: academicContextRepository,
         loadMaterial: (storageKey) => getStorageProvider().get(storageKey),
       }),
     ]);
 
-    const snapshot = { selection: data.context, ...academicContext.snapshot, warnings: academicContext.warnings } as Prisma.InputJsonValue;
+    const snapshot = { selection, ...academicContext.snapshot, warnings: academicContext.warnings } as Prisma.InputJsonValue;
     const shouldRename = chat.title === "Nuevo chat" && historyDesc.length === 0;
     const [userMessage, assistantMessage] = await prisma.$transaction([
       prisma.aIMessage.create({ data: { chatId, userId, role: "USER", content: data.content, status: "COMPLETE", contextSnapshot: snapshot }, select: { id: true, role: true, content: true, status: true, createdAt: true } }),
@@ -72,11 +76,19 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         send({ type: "meta", userMessage, assistantMessage, context: academicContext.snapshot, warnings });
         try {
           let images = academicContext.images.map((image) => image.base64);
-          if (images.length) {
-            const capabilities = await provider.getModelCapabilities({ baseUrl: settings.ollamaUrl, model: settings.model, timeoutMs: 5_000, signal: generationController.signal });
-            if (!capabilities.vision) {
-              images = [];
-              warnings.push("El modelo activo no admite imágenes; se omitieron en esta respuesta.");
+          let supportsTools = false;
+          if (settings.isAcademicContextEnabled && (images.length > 0 || selection.subjectIds.length + selection.taskIds.length + selection.bossIds.length + selection.gradeIds.length > 0)) {
+            try {
+              const capabilities = await provider.getModelCapabilities({ baseUrl: settings.ollamaUrl, model: settings.model, timeoutMs: 5_000, signal: generationController.signal });
+              supportsTools = capabilities.tools;
+              if (images.length && !capabilities.vision) {
+                images = imagesForModel(images, false);
+                warnings.push("El modelo activo no admite imágenes; se omitieron en esta respuesta.");
+                send({ type: "warning", warnings });
+              }
+            } catch {
+              images = imagesForModel(images, false);
+              warnings.push("No se pudieron comprobar las capacidades del modelo; se omitieron imágenes y herramientas.");
               send({ type: "warning", warnings });
             }
           }
@@ -91,10 +103,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
             history,
             contextText: academicContext.text,
             images,
-            selection: data.context,
+            selection,
             userId,
-            toolRepository: scopedReadOnlyToolRepository(data.context),
+            toolRepository: settings.isAcademicContextEnabled ? scopedReadOnlyToolRepository(selection) : emptyReadOnlyToolRepository,
             signal: generationController.signal,
+            allowTools: supportsTools,
           })) {
             if (event.type === "text-delta") {
               if (assistantContent.length + event.content.length > MAX_ASSISTANT_CHARACTERS) throw new AIProviderError("PROVIDER_ERROR");

@@ -2,6 +2,7 @@ import type { ContextSelection } from "@/lib/ai/validation";
 
 export type ChatSummary = { id: string; title: string; createdAt: string; updatedAt: string };
 export type ChatMessage = { id: string; role: "USER" | "ASSISTANT"; content: string; status: "PENDING" | "COMPLETE" | "ERROR"; model?: string | null; errorCode?: string | null; createdAt: string };
+export type Pagination = { page: number; pageSize: number; totalItems: number; totalPages: number; hasPrevious?: boolean; hasNext?: boolean };
 export type AISettingsValue = { ollamaUrl: string; model: string; isAcademicContextEnabled: boolean; contextLimit: number };
 export type ContextOption = { id: string; label: string; mimeType?: string };
 export type ContextOptions = {

@@ -19,6 +19,8 @@ describe("OllamaProvider", () => {
     expect(ollamaUrlSchema.safeParse("http://169.254.169.254:11434").success).toBe(false);
     expect(ollamaUrlSchema.safeParse("https://example.com").success).toBe(false);
     expect(ollamaUrlSchema.safeParse("http://localhost:11434/api").success).toBe(false);
+    expect(ollamaUrlSchema.safeParse("http://localhost:8080").success).toBe(true);
+    expect(ollamaUrlSchema.safeParse("http://localhost.evil:11434").success).toBe(false);
   });
   it("reports model availability and capabilities", async () => {
     const requests: string[] = [];
@@ -93,5 +95,22 @@ describe("OllamaProvider", () => {
     };
 
     await expect(consume()).rejects.toMatchObject({ code: "INVALID_RESPONSE" } satisfies Partial<AIProviderError>);
+  });
+
+  it("omits tools, vision payloads and applies the output token limit when unsupported", async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    const provider = new OllamaProvider(async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return streamResponse(['{"message":{"role":"assistant","content":"ok"},"done":true}\n']);
+    });
+
+    for await (const _event of provider.streamChat({
+      baseUrl: "http://localhost:11434", model: "small", timeoutMs: 1_000,
+      messages: [{ role: "user", content: "hola", images: ["base64"] }],
+      tools: undefined, maxOutputTokens: 123,
+    })) void _event;
+
+    expect(requestBody).toMatchObject({ options: { num_predict: 123 } });
+    expect(requestBody).not.toHaveProperty("tools");
   });
 });

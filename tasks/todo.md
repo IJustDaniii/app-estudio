@@ -33,5 +33,16 @@
 ## Cierre
 
 - [x] Documentación y controles finales.
-  - Verificación: `npm test`, `npm run lint`, `npm run typecheck`, `npm run build`, `npm audit`.
+  - Verificación: `npm test`, `npm run lint`, `npm run typecheck`, `npm run build`, `npx prisma validate`, `npm audit`.
 - [x] Commit en `main` y push a `origin/main`.
+
+## Endurecimiento revisado
+
+- [x] Contexto desactivado y capacidades del modelo respetadas en cliente y servidor.
+  - Verificación: pruebas de selección efectiva, tools desactivadas y proveedor sin capacidades opcionales.
+- [x] Paginación progresiva de conversaciones/mensajes y apertura de chats antiguos por URL.
+  - Verificación: typecheck, build y revisión de rutas autenticadas con aislamiento por `userId`.
+- [x] URL de Ollama, rate limiting, cuerpos y salida acotados.
+  - Verificación: pruebas de validación, rate limiter, errores del proveedor y `npm audit` sin vulnerabilidades.
+- [x] Comprobaciones finales repetidas tras los cambios.
+  - Verificación: `npm test` (58 pruebas), `npm run lint`, `npm run typecheck`, `npm run build`, `npx prisma validate` y `npm audit` sin vulnerabilidades.

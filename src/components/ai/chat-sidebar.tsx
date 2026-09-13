@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { ChatSummary } from "@/components/ai/types";
 
-export function ChatSidebar({ chats, activeId, disabled, onCreate, onSelect, onRename, onDelete }: {
+export function ChatSidebar({ chats, activeId, disabled, hasMore, loadingMore, onLoadMore, onCreate, onSelect, onRename, onDelete }: {
   chats: ChatSummary[]; activeId: string | null; disabled: boolean;
+  hasMore: boolean; loadingMore: boolean; onLoadMore: () => void;
   onCreate: () => void; onSelect: (id: string) => void; onRename: (id: string, title: string) => void; onDelete: (id: string) => void;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -25,6 +26,7 @@ export function ChatSidebar({ chats, activeId, disabled, onCreate, onSelect, onR
         {editingId === chat.id ? <><Input aria-label="Nuevo título del chat" value={title} maxLength={80} className="h-8" onChange={(event) => setTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") save(); if (event.key === "Escape") setEditingId(null); }} autoFocus /><Button type="button" size="icon" variant="ghost" className="size-8" onClick={save} aria-label="Guardar título"><Check className="size-3.5" /></Button><Button type="button" size="icon" variant="ghost" className="size-8" onClick={() => setEditingId(null)} aria-label="Cancelar edición"><X className="size-3.5" /></Button></> : <><button type="button" className="min-w-0 flex-1 truncate rounded-md px-2 py-1.5 text-left text-sm" onClick={() => onSelect(chat.id)} aria-current={activeId === chat.id ? "true" : undefined}>{chat.title}</button><Button type="button" size="icon" variant="ghost" className="size-8" onClick={() => startEditing(chat)} aria-label={`Renombrar ${chat.title}`}><Pencil className="size-3.5" /></Button><Button type="button" size="icon" variant="ghost" className="size-8" onClick={() => onDelete(chat.id)} aria-label={`Eliminar ${chat.title}`}><Trash2 className="size-3.5" /></Button></>}
       </div>)}
       {!chats.length && <p className="p-3 text-sm text-muted-foreground">Aún no hay conversaciones.</p>}
+      {hasMore && <Button type="button" variant="ghost" size="sm" className="mt-1" onClick={onLoadMore} disabled={loadingMore}>{loadingMore ? "Cargando…" : "Cargar más"}</Button>}
     </div>
   </aside>;
 }

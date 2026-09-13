@@ -6,6 +6,7 @@ export const DEFAULT_AI_CONTEXT_LIMIT = 12_000;
 export const AI_CHAT_TITLE_MAX_LENGTH = 80;
 export const AI_MESSAGE_MAX_LENGTH = 8_000;
 export const AI_CONTEXT_ITEM_LIMIT = 20;
+export const AI_MAX_OUTPUT_TOKENS = 4_096;
 
 export const ollamaUrlSchema = z.string().trim().max(200).transform((raw, context) => {
   try {
@@ -38,6 +39,11 @@ export const listChatsQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(50),
 });
 
+export const listMessagesQuerySchema = z.object({
+  messagePage: z.coerce.number().int().min(1).max(1_000).default(1),
+  messagePageSize: z.coerce.number().int().min(1).max(100).default(50),
+});
+
 const idList = z.array(z.string().cuid()).max(AI_CONTEXT_ITEM_LIMIT);
 
 export const contextSelectionSchema = z.object({
@@ -48,6 +54,9 @@ export const contextSelectionSchema = z.object({
   goalIds: idList.default([]),
   studySessionIds: idList.default([]),
   materialIds: idList.default([]),
+}).superRefine((selection, context) => {
+  const total = Object.values(selection).reduce((sum, ids) => sum + ids.length, 0);
+  if (total > 60) context.addIssue({ code: "too_big", maximum: 60, origin: "array", inclusive: true, path: [], message: "La selección de contexto es demasiado grande." });
 });
 
 export type ContextSelection = z.infer<typeof contextSelectionSchema>;
@@ -63,6 +72,10 @@ export const sendMessageSchema = z.object({
   content: z.string().trim().min(1).max(AI_MESSAGE_MAX_LENGTH),
   context: contextSelectionSchema.default(emptyContextSelection),
 });
+
+export function effectiveContextSelection(isEnabled: boolean, selection: ContextSelection) {
+  return isEnabled ? selection : emptyContextSelection;
+}
 
 export function defaultChatTitle(content: string) {
   const compact = content.replace(/\s+/g, " ").trim();

@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 import type { AcademicContextRepository } from "@/lib/ai/context";
 import type { ReadOnlyToolRepository } from "@/lib/ai/tools";
 import type { ContextSelection } from "@/lib/ai/validation";
-import { DEFAULT_AI_CONTEXT_LIMIT, DEFAULT_AI_MODEL, DEFAULT_OLLAMA_URL } from "@/lib/ai/validation";
+import { aiModelSchema, DEFAULT_AI_CONTEXT_LIMIT, DEFAULT_AI_MODEL, DEFAULT_OLLAMA_URL, ollamaUrlSchema } from "@/lib/ai/validation";
 import { prisma } from "@/lib/prisma";
 
 export const academicContextRepository: AcademicContextRepository = {
@@ -54,8 +54,22 @@ export function scopedReadOnlyToolRepository(selection: ContextSelection): ReadO
   };
 }
 
+export const emptyReadOnlyToolRepository: ReadOnlyToolRepository = {
+  subjects: async () => [],
+  tasks: async () => [],
+  bosses: async () => [],
+  grades: async () => [],
+};
+
 export async function getAISettings(userId: string) {
-  return (await prisma.aISettings.findUnique({ where: { userId } })) ?? {
+  const stored = await prisma.aISettings.findUnique({ where: { userId } });
+  if (stored) {
+    const ollamaUrl = ollamaUrlSchema.safeParse(stored.ollamaUrl).data;
+    const model = aiModelSchema.safeParse(stored.model).data;
+    const contextLimit = Number.isSafeInteger(stored.contextLimit) && stored.contextLimit >= 1_000 && stored.contextLimit <= 50_000 ? stored.contextLimit : DEFAULT_AI_CONTEXT_LIMIT;
+    return { ...stored, ollamaUrl: ollamaUrl ?? DEFAULT_OLLAMA_URL, model: model ?? DEFAULT_AI_MODEL, contextLimit };
+  }
+  return {
     userId,
     provider: "OLLAMA" as const,
     ollamaUrl: DEFAULT_OLLAMA_URL,

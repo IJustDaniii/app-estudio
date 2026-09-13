@@ -64,4 +64,21 @@ describe("AI tools", () => {
     ]);
     expect(round).toBe(2);
   });
+
+  it("does not send tools when the active model lacks tool support", async () => {
+    let receivedTools: unknown;
+    const provider: AIProvider = {
+      id: "fake",
+      async testConnection() { throw new Error("unused"); },
+      async getModelCapabilities() { return { vision: false, tools: false }; },
+      async *streamChat(input) { receivedTools = input.tools; yield { type: "text-delta", content: "ok" }; yield { type: "done" }; },
+    };
+    for await (const _event of streamAIResponse({
+      provider, baseUrl: "http://localhost:11434", model: "small", timeoutMs: 100,
+      history: [{ role: "USER", content: "consulta" }], contextText: "", images: [],
+      selection: { ...emptyContextSelection, taskIds: ["cm0000000000000000000000"] }, userId: "user-1",
+      toolRepository: { subjects: async () => [], tasks: async () => [], bosses: async () => [], grades: async () => [] }, allowTools: false,
+    })) void _event;
+    expect(receivedTools).toBeUndefined();
+  });
 });

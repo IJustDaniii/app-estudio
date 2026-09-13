@@ -31,6 +31,10 @@ La biblioteca muestra 50 materiales por página y limita a 100 las opciones de a
 
 Antes de interpretar el multipart, el servidor rechaza por `Content-Length` o mediante un stream limitado cualquier cuerpo superior al lote configurado más 2 MB de sobrecarga multipart; el límite de archivos y bytes del lote se sigue validando por separado.
 
+Las conversaciones se cargan por páginas de 50 elementos y los mensajes antiguos se incorporan bajo demanda; una URL `/app/ai?chat=<id>` también abre un chat que no esté en la primera página, siempre que pertenezca al usuario autenticado. El selector de contexto se vacía y el backend ignora cualquier selección cuando se desactiva el contexto académico. Antes de cada respuesta se consultan las capacidades del modelo: las herramientas se envían solo con soporte `tools` y las imágenes solo con soporte `vision`; si la comprobación falla, el chat continúa sin esos extras.
+
+Las rutas de IA requieren sesión, aplican límites de solicitudes por usuario (rate limiting en memoria del proceso), cuerpos JSON de 64 KiB, selecciones de contexto acotadas y un máximo de 4.096 tokens de salida. Ollama solo acepta `http://localhost`, `127.0.0.1` o `[::1]` (con cualquier puerto local) y las peticiones rechazan redirecciones. Los materiales e imágenes mantienen además sus límites de tamaño y cantidad descritos abajo.
+
 `StorageProvider` es el punto de extensión para Cloudflare R2. La implementación actual es únicamente local; no se han añadido R2, OCR ni embeddings.
 
 PWA de organización académica gamificada para 1.º de Bachillerato. La infraestructura inicial de IA local se encuentra en la sección IA; siguen fuera de alcance las funciones sociales y las mecánicas avanzadas.
@@ -64,8 +68,11 @@ npm test
 npm run lint
 npm run typecheck
 npm run build
+npx prisma validate
 npm audit
 ```
+
+Las comprobaciones anteriores se ejecutaron con los scripts del proyecto y finalizaron correctamente.
 
 ## Arquitectura
 

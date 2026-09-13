@@ -6,7 +6,7 @@ import { AISettingsPanel } from "@/components/ai/ai-settings-panel";
 import { ChatComposer } from "@/components/ai/chat-composer";
 import { ChatSidebar } from "@/components/ai/chat-sidebar";
 import { MessageList } from "@/components/ai/message-list";
-import type { AISettingsValue, ChatMessage, ChatSummary, ConnectionState, ContextOptions, ContextSelection } from "@/components/ai/types";
+import type { AISettingsValue, ChatMessage, ChatSummary, ConnectionState, ContextOptions, ContextSelection, Pagination } from "@/components/ai/types";
 import { Button } from "@/components/ui/button";
 import { emptyContextSelection } from "@/lib/ai/validation";
 
@@ -35,18 +35,22 @@ async function connectionFor(settings: AISettingsValue): Promise<ConnectionState
   }
 }
 
-export function AIWorkspace({ initialChats, initialActiveId, initialMessages, initialSettings, contextOptions }: {
-  initialChats: ChatSummary[]; initialActiveId: string | null; initialMessages: ChatMessage[]; initialSettings: AISettingsValue; contextOptions: ContextOptions;
+export function AIWorkspace({ initialChats, initialChatPagination, initialActiveId, initialMessages, initialMessagePagination, initialSettings, contextOptions }: {
+  initialChats: ChatSummary[]; initialChatPagination: Pagination; initialActiveId: string | null; initialMessages: ChatMessage[]; initialMessagePagination: Pagination; initialSettings: AISettingsValue; contextOptions: ContextOptions;
 }) {
   const [chats, setChats] = useState(initialChats);
   const [activeId, setActiveId] = useState(initialActiveId);
   const [messages, setMessages] = useState(initialMessages);
+  const [chatPagination, setChatPagination] = useState(initialChatPagination);
+  const [messagePagination, setMessagePagination] = useState(initialMessagePagination);
   const [settings, setSettings] = useState(initialSettings);
   const [availableOptions, setAvailableOptions] = useState(contextOptions);
   const [selection, setSelection] = useState<ContextSelection>(emptyContextSelection);
   const [connection, setConnection] = useState<ConnectionState>({ status: "checking", message: "Comprobando Ollama…" });
   const [busy, setBusy] = useState(false);
   const [loadingChat, setLoadingChat] = useState(false);
+  const [loadingMoreChats, setLoadingMoreChats] = useState(false);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [notice, setNotice] = useState("");
   const checkedInitialConnection = useRef(false);
@@ -63,7 +67,7 @@ export function AIWorkspace({ initialChats, initialActiveId, initialMessages, in
       const response = await fetch("/api/ai/chats", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
       if (!response.ok) throw new Error(await errorMessage(response));
       const chat = await response.json() as ChatSummary;
-      setChats((current) => [chat, ...current]); setActiveId(chat.id); setMessages([]); setSelection(emptyContextSelection);
+      setChats((current) => [chat, ...current]); setActiveId(chat.id); setMessages([]); setMessagePagination({ page: 1, pageSize: 50, totalItems: 0, totalPages: 0, hasPrevious: false, hasNext: false }); setSelection(emptyContextSelection);
       window.history.replaceState(null, "", `/app/ai?chat=${chat.id}`);
     } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo crear el chat."); }
     finally { setBusy(false); }
@@ -75,11 +79,37 @@ export function AIWorkspace({ initialChats, initialActiveId, initialMessages, in
     try {
       const response = await fetch(`/api/ai/chats/${id}`);
       if (!response.ok) throw new Error(await errorMessage(response));
-      const chat = await response.json() as ChatSummary & { messages: ChatMessage[] };
-      setActiveId(id); setMessages(chat.messages); setSelection(emptyContextSelection);
+      const chat = await response.json() as ChatSummary & { messages: ChatMessage[]; messagesPagination: Pagination };
+      setActiveId(id); setMessages(chat.messages); setMessagePagination(chat.messagesPagination); setSelection(emptyContextSelection);
       window.history.replaceState(null, "", `/app/ai?chat=${id}`);
     } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo cargar el chat."); }
     finally { setLoadingChat(false); }
+  }
+
+  async function loadMoreChats() {
+    if (!chatPagination.hasNext || loadingMoreChats) return;
+    setLoadingMoreChats(true);
+    try {
+      const response = await fetch(`/api/ai/chats?page=${chatPagination.page + 1}&pageSize=${chatPagination.pageSize}`);
+      if (!response.ok) throw new Error(await errorMessage(response));
+      const result = await response.json() as { data: ChatSummary[]; pagination: Pagination };
+      setChats((current) => [...current, ...result.data.filter((chat) => !current.some((item) => item.id === chat.id))]);
+      setChatPagination(result.pagination);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudieron cargar más conversaciones."); }
+    finally { setLoadingMoreChats(false); }
+  }
+
+  async function loadOlderMessages() {
+    if (!activeId || !messagePagination.hasNext || loadingOlderMessages) return;
+    setLoadingOlderMessages(true);
+    try {
+      const response = await fetch(`/api/ai/chats/${activeId}?messagePage=${messagePagination.page + 1}&messagePageSize=${messagePagination.pageSize}`);
+      if (!response.ok) throw new Error(await errorMessage(response));
+      const result = await response.json() as { messages: ChatMessage[]; messagesPagination: Pagination };
+      setMessages((current) => [...result.messages, ...current]);
+      setMessagePagination(result.messagesPagination);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudieron cargar mensajes anteriores."); }
+    finally { setLoadingOlderMessages(false); }
   }
 
   async function renameChat(id: string, title: string) {
@@ -143,7 +173,8 @@ export function AIWorkspace({ initialChats, initialActiveId, initialMessages, in
     let assistantId = "";
     try {
       const chatId = await ensureChat();
-      const response = await fetch(`/api/ai/chats/${chatId}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content, context: selection }) });
+      const context = settings.isAcademicContextEnabled ? selection : emptyContextSelection;
+      const response = await fetch(`/api/ai/chats/${chatId}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content, context }) });
       if (!response.ok || !response.body) throw new Error(await errorMessage(response));
       const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = "";
       while (true) {
@@ -167,7 +198,7 @@ export function AIWorkspace({ initialChats, initialActiveId, initialMessages, in
 
   return <section className="mx-auto flex h-[calc(100dvh-5rem)] min-h-[38rem] max-w-[96rem] flex-col px-0 lg:h-screen lg:p-5">
     <div className="flex items-center gap-3 border-b bg-card px-4 py-3 lg:rounded-t-xl lg:border"><span className="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground"><Bot className="size-4" /></span><div><h1 className="text-base font-semibold">IA</h1><p className={`text-xs ${connection.status === "offline" ? "text-destructive" : "text-muted-foreground"}`}>{connection.message}</p></div>{connection.status === "offline" && <Button type="button" size="sm" variant="outline" className="ml-auto" onClick={testConnection}><RefreshCw className="size-3.5" />Reintentar</Button>}</div>
-    <div className="grid min-h-0 flex-1 bg-card lg:grid-cols-[17rem_1fr] lg:border-x"><ChatSidebar chats={chats} activeId={activeId} disabled={busy} onCreate={createChat} onSelect={selectChat} onRename={renameChat} onDelete={deleteChat} /><div className="flex min-h-0 flex-col"><AISettingsPanel value={settings} connection={connection} busy={busy} onChange={setSettings} onSave={saveSettings} onTest={testConnection} />{notice && <div className="flex items-start gap-2 border-b bg-muted/60 px-4 py-2 text-xs" role="status"><CircleAlert className="mt-0.5 size-3.5 shrink-0" />{notice}</div>}<MessageList messages={messages} isLoading={loadingChat} /><ChatComposer disabled={busy || loadingChat || uploading} contextEnabled={settings.isAcademicContextEnabled} options={availableOptions} context={selection} uploading={uploading} onContextChange={setSelection} onUpload={uploadMaterials} onSend={sendMessage} /></div></div>
+    <div className="grid min-h-0 flex-1 bg-card lg:grid-cols-[17rem_1fr] lg:border-x"><ChatSidebar chats={chats} activeId={activeId} disabled={busy} hasMore={Boolean(chatPagination.hasNext)} loadingMore={loadingMoreChats} onLoadMore={loadMoreChats} onCreate={createChat} onSelect={selectChat} onRename={renameChat} onDelete={deleteChat} /><div className="flex min-h-0 flex-col"><AISettingsPanel value={settings} connection={connection} busy={busy} onChange={(value) => { setSettings(value); if (!value.isAcademicContextEnabled) setSelection(emptyContextSelection); }} onSave={saveSettings} onTest={testConnection} />{notice && <div className="flex items-start gap-2 border-b bg-muted/60 px-4 py-2 text-xs" role="status"><CircleAlert className="mt-0.5 size-3.5 shrink-0" />{notice}</div>}<MessageList messages={messages} isLoading={loadingChat} canLoadOlder={Boolean(messagePagination.hasNext)} loadingOlder={loadingOlderMessages} onLoadOlder={loadOlderMessages} /><ChatComposer disabled={busy || loadingChat || uploading} contextEnabled={settings.isAcademicContextEnabled} options={availableOptions} context={selection} uploading={uploading} onContextChange={setSelection} onUpload={uploadMaterials} onSend={sendMessage} /></div></div>
     <p className="border-t bg-card px-4 py-2 text-center text-[11px] text-muted-foreground lg:rounded-b-xl lg:border">La IA puede equivocarse. Revisa fechas, notas y decisiones académicas importantes.</p>
   </section>;
 }

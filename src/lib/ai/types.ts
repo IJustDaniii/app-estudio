@@ -40,6 +40,7 @@ export type AIProviderRequest = {
   messages: AIMessageInput[];
   tools?: AIToolDefinition[];
   timeoutMs: number;
+  maxOutputTokens?: number;
   signal?: AbortSignal;
 };
 

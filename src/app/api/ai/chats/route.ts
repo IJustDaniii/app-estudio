@@ -1,5 +1,6 @@
 import { ZodError } from "zod";
-import { aiApiError, apiUserId, parseAIJson } from "@/lib/ai/http";
+import { aiApiError, aiRateLimitError, apiUserId, parseAIJson } from "@/lib/ai/http";
+import { checkAIRateLimit } from "@/lib/ai/rate-limit";
 import { createChatSchema, listChatsQuerySchema } from "@/lib/ai/validation";
 import { prisma } from "@/lib/prisma";
 
@@ -8,6 +9,8 @@ export const runtime = "nodejs";
 export async function GET(request: Request) {
   const userId = await apiUserId();
   if (!userId) return aiApiError("UNAUTHORIZED", "No autorizado", 401);
+  const rate = checkAIRateLimit(`chats:list:${userId}`, 60);
+  if (!rate.allowed) return aiRateLimitError(rate.retryAfterSeconds);
   const parsed = listChatsQuerySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
   if (!parsed.success) return aiApiError("VALIDATION_ERROR", "Paginación no válida", 422);
   const { page, pageSize } = parsed.data;
@@ -21,6 +24,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const userId = await apiUserId();
   if (!userId) return aiApiError("UNAUTHORIZED", "No autorizado", 401);
+  const rate = checkAIRateLimit(`chats:create:${userId}`, 30);
+  if (!rate.allowed) return aiRateLimitError(rate.retryAfterSeconds);
   try {
     const data = await parseAIJson(request, createChatSchema);
     const chat = await prisma.aIChat.create({ data: { userId, title: data.title ?? "Nuevo chat" }, select: { id: true, title: true, createdAt: true, updatedAt: true } });

@@ -68,7 +68,7 @@ export class OllamaProvider implements AIProvider {
   async testConnection(input: { baseUrl: string; model: string; timeoutMs: number; signal?: AbortSignal }): Promise<AIConnectionStatus> {
     const control = requestControl(input.timeoutMs, input.signal);
     try {
-      const response = await this.fetcher(`${input.baseUrl}/api/tags`, { signal: control.signal, headers: { Accept: "application/json" } });
+      const response = await this.fetcher(`${input.baseUrl}/api/tags`, { signal: control.signal, redirect: "error", headers: { Accept: "application/json" } });
       if (!response.ok) throw errorForResponse(response);
       const data = await parseJson(response, tagsSchema);
       const models = data.models.map((item) => item.model ?? item.name);
@@ -91,6 +91,7 @@ export class OllamaProvider implements AIProvider {
       const response = await this.fetcher(`${input.baseUrl}/api/show`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
+        redirect: "error",
         body: JSON.stringify({ model: input.model, verbose: false }),
         signal: control.signal,
       });
@@ -110,6 +111,7 @@ export class OllamaProvider implements AIProvider {
       const response = await this.fetcher(`${input.baseUrl}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
+        redirect: "error",
         body: JSON.stringify({
           model: input.model,
           messages: input.messages.map((message) => ({
@@ -122,6 +124,7 @@ export class OllamaProvider implements AIProvider {
           ...(input.tools?.length ? { tools: input.tools.map((tool) => ({ type: "function", function: { name: tool.name, description: tool.description, parameters: tool.parameters } })) } : {}),
           stream: true,
           think: false,
+          ...(input.maxOutputTokens ? { options: { num_predict: input.maxOutputTokens } } : {}),
         }),
         signal: control.signal,
       });

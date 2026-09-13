@@ -2,6 +2,7 @@ import { AIProviderError } from "@/lib/ai/errors";
 import { executeReadOnlyTool, AI_TOOL_DEFINITIONS, type ReadOnlyToolRepository } from "@/lib/ai/tools";
 import type { AIMessageInput, AIProvider } from "@/lib/ai/types";
 import type { ContextSelection } from "@/lib/ai/validation";
+import { AI_MAX_OUTPUT_TOKENS } from "@/lib/ai/validation";
 
 const MAX_HISTORY_MESSAGES = 40;
 const MAX_HISTORY_CHARACTERS = 30_000;
@@ -25,8 +26,12 @@ export function boundedHistory(messages: StoredAIMessage[]) {
   return selected.reverse();
 }
 
-function canUseTools(selection: ContextSelection) {
-  return selection.subjectIds.length + selection.taskIds.length + selection.bossIds.length + selection.gradeIds.length > 0;
+export function canUseTools(selection: ContextSelection, allowTools = true) {
+  return allowTools && selection.subjectIds.length + selection.taskIds.length + selection.bossIds.length + selection.gradeIds.length > 0;
+}
+
+export function imagesForModel(images: string[], supportsVision: boolean) {
+  return supportsVision ? images : [];
 }
 
 export function providerMessages(input: { history: StoredAIMessage[]; contextText: string; images: string[] }) {
@@ -47,16 +52,20 @@ export async function* streamAIResponse(input: {
   userId: string;
   toolRepository: ReadOnlyToolRepository;
   signal?: AbortSignal;
+  allowTools?: boolean;
+  maxOutputTokens?: number;
 }) {
   const messages = providerMessages({ history: input.history, contextText: input.contextText, images: input.images });
-  const tools = canUseTools(input.selection) ? AI_TOOL_DEFINITIONS : undefined;
+  const tools = canUseTools(input.selection, input.allowTools) ? AI_TOOL_DEFINITIONS : undefined;
   let inputTokens: number | undefined;
   let outputTokens: number | undefined;
+  let outputBudgetUsed = 0;
+  const outputBudget = input.maxOutputTokens ?? AI_MAX_OUTPUT_TOKENS;
 
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
     const calls: Array<{ name: string; arguments: unknown }> = [];
     let assistantContent = "";
-    for await (const event of input.provider.streamChat({ baseUrl: input.baseUrl, model: input.model, messages, tools, timeoutMs: input.timeoutMs, signal: input.signal })) {
+    for await (const event of input.provider.streamChat({ baseUrl: input.baseUrl, model: input.model, messages, tools, timeoutMs: input.timeoutMs, signal: input.signal, maxOutputTokens: Math.max(1, outputBudget - outputBudgetUsed) })) {
       if (event.type === "text-delta") {
         assistantContent += event.content;
         yield event;
@@ -64,6 +73,7 @@ export async function* streamAIResponse(input: {
       else {
         inputTokens = event.usage?.inputTokens ?? inputTokens;
         outputTokens = event.usage?.outputTokens ?? outputTokens;
+        outputBudgetUsed += event.usage?.outputTokens ?? 0;
       }
     }
 

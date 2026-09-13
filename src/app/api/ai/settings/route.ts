@@ -1,5 +1,6 @@
 import { ZodError } from "zod";
-import { aiApiError, apiUserId, parseAIJson } from "@/lib/ai/http";
+import { aiApiError, aiRateLimitError, apiUserId, parseAIJson } from "@/lib/ai/http";
+import { checkAIRateLimit } from "@/lib/ai/rate-limit";
 import { getAISettings } from "@/lib/ai/repository";
 import { aiSettingsSchema } from "@/lib/ai/validation";
 import { prisma } from "@/lib/prisma";
@@ -9,12 +10,16 @@ export const runtime = "nodejs";
 export async function GET() {
   const userId = await apiUserId();
   if (!userId) return aiApiError("UNAUTHORIZED", "No autorizado", 401);
+  const rate = checkAIRateLimit(`settings:get:${userId}`, 30);
+  if (!rate.allowed) return aiRateLimitError(rate.retryAfterSeconds);
   return Response.json(await getAISettings(userId), { headers: { "Cache-Control": "private, no-store" } });
 }
 
 export async function PATCH(request: Request) {
   const userId = await apiUserId();
   if (!userId) return aiApiError("UNAUTHORIZED", "No autorizado", 401);
+  const rate = checkAIRateLimit(`settings:update:${userId}`, 20);
+  if (!rate.allowed) return aiRateLimitError(rate.retryAfterSeconds);
   try {
     const data = await parseAIJson(request, aiSettingsSchema);
     const settings = await prisma.aISettings.upsert({

@@ -17,6 +17,17 @@ describe("interfaz de IA", () => {
     expect(markup).toContain("Selecciona sólo lo relevante");
   });
 
+  it("no permite abrir el selector cuando el contexto está desactivado", () => {
+    const markup = renderToStaticMarkup(createElement(ContextPicker, {
+      enabled: false,
+      value: emptyContextSelection,
+      onChange: () => undefined,
+      options: { subjects: [], tasks: [], bosses: [], grades: [], goals: [], studySessions: [], materials: [] },
+    }));
+    expect(markup).toContain('aria-disabled="true"');
+    expect(markup).not.toContain("Selecciona sólo lo relevante");
+  });
+
   it("muestra los fallos del asistente como recuperables", () => {
     const markup = renderToStaticMarkup(createElement(MessageList, {
       isLoading: false,
