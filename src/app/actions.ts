@@ -258,7 +258,7 @@ export async function updateTask(formData: FormData) {
   const existing = await prisma.task.findFirst({ where: { id, userId } });
   if (!existing) return;
   const data = taskSchema.parse(formObject(formData));
-  const schedule = canRescheduleTask(existing, data.dueDate, new Date());
+  const schedule = canRescheduleTask(existing, data.dueDate, new Date(), data.planningMode);
   if (!schedule.allowed) {
     redirect(`/app/tasks?error=${schedule.reason === "OVERDUE_FIXED_DEADLINE" ? "overdue-fixed-deadline" : "fixed-deadline-date"}`);
   }

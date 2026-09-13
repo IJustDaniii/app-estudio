@@ -26,6 +26,10 @@ describe("reglas del nucleo academico", () => {
     expect(canRescheduleTask({ planningMode: "FIXED_DEADLINE", dueDate: new Date("2026-09-12T10:00:45.000Z") }, new Date("2026-09-12T10:00:00.000Z"), new Date("2026-09-13T10:00:00.000Z"))).toEqual({ allowed: true });
   });
 
+  it("no permite convertir una obligación fija vencida en estudio flexible para esquivar la fecha", () => {
+    expect(canRescheduleTask({ planningMode: "FIXED_DEADLINE", dueDate: new Date("2026-09-12T10:00:00.000Z") }, new Date("2026-09-12T10:00:00.000Z"), new Date("2026-09-13T10:00:00.000Z"), "FLEXIBLE_STUDY")).toEqual({ allowed: false, reason: "OVERDUE_FIXED_DEADLINE" });
+  });
+
   it("permite cambiar la fecha del estudio flexible aunque ya haya pasado", () => {
     const task: ReschedulableTask = {
       planningMode: "FLEXIBLE_STUDY",

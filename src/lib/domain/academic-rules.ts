@@ -7,14 +7,14 @@ export type RescheduleResult =
   | { allowed: true }
   | { allowed: false; reason: "OVERDUE_FIXED_DEADLINE" | "FIXED_DEADLINE_NEEDS_DATE" };
 
-export function canRescheduleTask(task: ReschedulableTask, nextDueDate: Date | null, now = new Date()): RescheduleResult {
+export function canRescheduleTask(task: ReschedulableTask, nextDueDate: Date | null, now = new Date(), nextPlanningMode = task.planningMode): RescheduleResult {
   if (task.planningMode === "FIXED_DEADLINE" && !nextDueDate) {
     return { allowed: false, reason: "FIXED_DEADLINE_NEEDS_DATE" };
   }
 
   const minute = (date: Date | null) => date === null ? null : Math.floor(date.getTime() / 60_000);
   const isChangingDate = minute(task.dueDate) !== minute(nextDueDate);
-  if (task.planningMode === "FIXED_DEADLINE" && task.dueDate && task.dueDate < now && isChangingDate) {
+  if (task.planningMode === "FIXED_DEADLINE" && task.dueDate && task.dueDate < now && (isChangingDate || nextPlanningMode !== "FIXED_DEADLINE")) {
     return { allowed: false, reason: "OVERDUE_FIXED_DEADLINE" };
   }
 
