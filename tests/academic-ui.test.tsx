@@ -5,6 +5,8 @@ import { ConfirmSubmit } from "@/components/confirm-submit";
 import { SubjectIcon } from "@/components/subject-icon";
 import { TaskEditor } from "@/components/task-editor";
 import { BossEditor } from "@/components/boss-editor";
+import { GradeCalculator } from "@/components/grade-calculator";
+import { GradeEditor } from "@/components/grade-editor";
 
 describe("interfaz del nucleo academico", () => {
   it("renderiza un icono del catalogo sin insertar texto como marcado", () => {
@@ -43,5 +45,20 @@ describe("interfaz del nucleo academico", () => {
     expect(markup).toContain("Realizado");
     expect(markup).toContain("actualGrade");
     expect(markup).toContain("Tema 1");
+  });
+
+  it("permite editar el peso de una nota y calcular la nota necesaria", () => {
+    const editor = renderToStaticMarkup(createElement(GradeEditor, {
+      action: () => undefined,
+      grade: { id: "cm12345678901234567890123", label: "Examen", subjectId: "cm12345678901234567890124", value: 6.5, weight: 2, date: new Date("2026-09-13") },
+      subjects: [{ id: "cm12345678901234567890124", name: "Historia" }],
+    }));
+    const calculator = renderToStaticMarkup(createElement(GradeCalculator, {
+      subjects: [{ id: "cm12345678901234567890124", name: "Historia", weightedSum: 13, totalWeight: 2 }],
+    }));
+    expect(editor).toContain("name=\"weight\"");
+    expect(editor).toContain("2");
+    expect(calculator).toMatch(/nota necesaria/i);
+    expect(calculator).toContain("peso de la próxima nota");
   });
 });

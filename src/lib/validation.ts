@@ -116,13 +116,14 @@ export const gradeSchema = z.object({
   label: requiredText(100),
   subjectId: z.string().cuid(),
   value: z.coerce.number().min(0).max(10),
-  weight: z.coerce.number().min(0.01).max(100),
+  weight: z.coerce.number().min(0.01).max(100).default(1),
   date: z.coerce.date(),
 });
 
 export const goalSchema = z.object({
   title: requiredText(160),
   category: z.enum(["ACADEMIC", "PERSONAL"]).default("ACADEMIC"),
+  subjectId: optionalId,
   targetDate: emptyToNullDate,
   progress: z.coerce.number().int().min(0).max(100),
 });
