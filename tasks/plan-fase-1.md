@@ -53,7 +53,7 @@ Prisma y validacion
 
 - Cada tarea empieza con pruebas de reglas o de contrato que fallen antes del cambio.
 - Tras cada bloque se ejecutan las pruebas completas, lint, tipos y compilacion.
-- Al final se comprueban Prisma, migraciones, auditoria de dependencias, recorrido principal de navegador en escritorio y movil, permisos y ausencia de datos de otra cuenta.
+- Al final se comprueban Prisma, migraciones, auditoria de dependencias, recorrido principal desde el navegador, permisos y ausencia de datos de otra cuenta.
 
 ## Riesgos y mitigaciones
 

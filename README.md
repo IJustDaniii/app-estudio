@@ -71,6 +71,8 @@ npm audit --audit-level=high
 
 Las reglas activas de XP, monedas, niveles, rachas y misiones, junto con la protección de sesiones y recompensas repetidas, están documentadas en [docs/fase-0-integridad.md](docs/fase-0-integridad.md). Las decisiones importantes de esta fase están en [ADR-002](docs/decisions/ADR-002-integridad-progreso-y-estudio.md).
 
+El alcance y el estado de la Fase 1 están en [tasks/plan-fase-1.md](tasks/plan-fase-1.md) y [tasks/todo-fase-1.md](tasks/todo-fase-1.md). Sus decisiones están en [ADR-003](docs/decisions/ADR-003-nucleo-academico.md), las notas del parche en [docs/notas-parche-fase-1.md](docs/notas-parche-fase-1.md) y la auditoría final en [docs/auditoria-fase-1.md](docs/auditoria-fase-1.md).
+
 ## Arquitectura
 
 - Next.js App Router, React y TypeScript estricto.
