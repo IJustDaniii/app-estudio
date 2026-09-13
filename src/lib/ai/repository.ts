@@ -107,7 +107,7 @@ function toolLimit(limit: number, maxItemsPerCategory: number) {
 }
 
 export function scopedReadOnlyToolRepository(selection: ContextSelection, permissions: AIAcademicPermissions = defaultAIAcademicPermissions, maxItemsPerCategory = DEFAULT_AI_CONTEXT_ITEM_LIMIT, scopeSubjectIds: string[] = []): ReadOnlyToolRepository {
-  const subjects = (userId: string, args: { query?: string; limit: number }) => prisma.subject.findMany({ where: { userId, ...(selection.subjectIds.length ? { id: { in: selection.subjectIds } } : {}), name: textFilter(args.query) }, select: { id: true, name: true, color: true }, orderBy: { name: "asc" }, take: toolLimit(args.limit, maxItemsPerCategory) });
+  const subjects = (userId: string, args: { query?: string; limit: number }) => prisma.subject.findMany({ where: { userId, ...(selection.subjectIds.length ? { id: { in: selection.subjectIds } } : scopeSubjectIds.length ? { id: { in: scopeSubjectIds } } : {}), name: textFilter(args.query) }, select: { id: true, name: true, color: true }, orderBy: { name: "asc" }, take: toolLimit(args.limit, maxItemsPerCategory) });
   return {
     subjects,
     topics: (userId, args) => prisma.topic.findMany({ where: { userId, ...(selection.topicIds.length ? { id: { in: selection.topicIds } } : {}), ...(scopedSubjectIds(selection, scopeSubjectIds).length ? { subjectId: { in: scopedSubjectIds(selection, scopeSubjectIds) } } : {}), name: textFilter(args.query) }, select: { id: true, name: true, subject: { select: { name: true } } }, orderBy: { name: "asc" }, take: toolLimit(args.limit, maxItemsPerCategory) }),
@@ -165,7 +165,7 @@ export async function getAISettings(userId: string) {
 
 export async function getAIContextOptions(userId: string, settings?: Awaited<ReturnType<typeof getAISettings>>) {
   const effectiveSettings = settings ?? await getAISettings(userId);
-  if (!effectiveSettings.isAcademicContextEnabled) return { subjects: [], topics: [], tasks: [], bosses: [], grades: [], goals: [], studySessions: [], materials: [] };
+  if (!effectiveSettings.isAIEnabled || !effectiveSettings.isAcademicContextEnabled) return { subjects: [], topics: [], tasks: [], bosses: [], grades: [], goals: [], studySessions: [], materials: [] };
   const [subjects, topics, tasks, bosses, grades, goals, studySessions, materials] = await Promise.all([
     prisma.subject.findMany({ where: { userId }, select: { id: true, name: true }, orderBy: { name: "asc" }, take: 100 }),
     prisma.topic.findMany({ where: { userId }, select: { id: true, name: true, subject: { select: { name: true } } }, orderBy: { updatedAt: "desc" }, take: 100 }),

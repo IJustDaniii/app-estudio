@@ -49,25 +49,25 @@
 
 ## Extensión: contexto académico adaptativo
 
-- [ ] Contrato de política y selección por intención.
+- [x] Contrato de política y selección por intención.
   - Aceptación: clasifica hoy/planificación, asignatura/materiales, rendimiento, horario y gamificación; deduplica selecciones y aplica límites configurables.
   - Verificación: pruebas unitarias de intención, límites y ausencia de datos cuando el modo personal está apagado.
-- [ ] Repositorio central de lecturas académicas y migración de permisos.
+- [x] Repositorio central de lecturas académicas y migración de permisos.
   - Aceptación: consulta temas, calendario, estadísticas y gamificación además de las entidades existentes; todas las lecturas filtran por usuario y categoría.
   - Verificación: pruebas de aislamiento y permisos, `prisma validate` y `prisma generate`.
-- [ ] Herramientas de lectura y chat gobernados por permisos.
+- [x] Herramientas de lectura y chat gobernados por permisos.
   - Aceptación: las herramientas disponibles coinciden con las categorías autorizadas; categorías desactivadas no se consultan ni llegan al proveedor; IA desactivada bloquea sólo el chat.
   - Verificación: pruebas de herramientas, ruta de mensajes y comportamiento sin contexto personal.
-- [ ] Ajustes de usuario y trazabilidad visible.
+- [x] Ajustes de usuario y trazabilidad visible.
   - Aceptación: interruptores independientes, selector filtrado, opción por mensaje sin contexto y resumen de contexto usado por respuesta.
   - Verificación: pruebas de render, typecheck, lint y comprobación responsive del chat.
 
 ## Checkpoint: extensión completa
 
-- [ ] `npm test`
-- [ ] `npm run lint`
-- [ ] `npm run typecheck`
-- [ ] `npm run build`
-- [ ] `npx prisma validate`
-- [ ] `npm audit --audit-level=high`
+- [x] `npm test`
+- [x] `npm run lint`
+- [x] `npm run typecheck`
+- [x] `npm run build`
+- [x] `npx prisma validate`
+- [x] `npm audit --audit-level=high`
 - [ ] Commit y push a `origin/main`

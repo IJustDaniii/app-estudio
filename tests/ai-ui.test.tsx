@@ -11,9 +11,9 @@ describe("interfaz de IA", () => {
       enabled: true,
       value: emptyContextSelection,
       onChange: () => undefined,
-      options: { subjects: [], tasks: [], bosses: [], grades: [], goals: [], studySessions: [], materials: [] },
+      options: { subjects: [], topics: [], tasks: [], bosses: [], grades: [], goals: [], studySessions: [], materials: [] },
     }));
-    expect(markup).toContain("Nada de la base de datos se añade automáticamente");
+    expect(markup).toContain("La pregunta guía una selección compacta");
     expect(markup).toContain("Selecciona sólo lo relevante");
   });
 
@@ -22,7 +22,7 @@ describe("interfaz de IA", () => {
       enabled: false,
       value: emptyContextSelection,
       onChange: () => undefined,
-      options: { subjects: [], tasks: [], bosses: [], grades: [], goals: [], studySessions: [], materials: [] },
+      options: { subjects: [], topics: [], tasks: [], bosses: [], grades: [], goals: [], studySessions: [], materials: [] },
     }));
     expect(markup).toContain('aria-disabled="true"');
     expect(markup).not.toContain("Selecciona sólo lo relevante");
@@ -35,6 +35,22 @@ describe("interfaz de IA", () => {
     }));
     expect(markup).toContain("Respuesta parcial");
     expect(markup).toContain("Comprueba Ollama y vuelve a intentarlo");
+  });
+
+  it("muestra el resumen del contexto usado en cada respuesta", () => {
+    const markup = renderToStaticMarkup(createElement(MessageList, {
+      isLoading: false,
+      messages: [{ id: "message-context", role: "ASSISTANT", content: "Respuesta", status: "COMPLETE", model: "qwen3.5:9b", createdAt: "2026-09-13T00:00:00.000Z", contextSnapshot: { mode: "personal", intent: "today", used: [{ category: "tasksAndBosses", label: "Tareas, Bosses y objetivos", count: 2 }], blocked: [], included: [], omitted: [], warnings: [] } }],
+    }));
+    expect(markup).toContain("Contexto usado: Tareas, Bosses y objetivos (2)");
+  });
+
+  it("indica cuando una respuesta se generó sin contexto personal", () => {
+    const markup = renderToStaticMarkup(createElement(MessageList, {
+      isLoading: false,
+      messages: [{ id: "message-no-context", role: "ASSISTANT", content: "Respuesta general", status: "COMPLETE", model: "qwen3.5:9b", createdAt: "2026-09-13T00:00:00.000Z", contextSnapshot: { mode: "none", intent: "today", used: [], blocked: [], included: [], omitted: [], warnings: [] } }],
+    }));
+    expect(markup).toContain("Sin contexto personal");
   });
 
   it("renderiza Markdown y fórmulas del asistente como contenido visual", () => {

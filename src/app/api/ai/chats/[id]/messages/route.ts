@@ -2,9 +2,10 @@ import type { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
 import { AIProviderError } from "@/lib/ai/errors";
 import { imagesForModel, streamAIResponse } from "@/lib/ai/chat";
-import { buildAcademicContext } from "@/lib/ai/context";
+import { buildAcademicContext, selectAcademicContextPlan } from "@/lib/ai/context";
 import { aiApiError, aiRateLimitError, apiUserId, parseAIJson } from "@/lib/ai/http";
 import { getAIProvider } from "@/lib/ai/providers";
+import { toolDefinitionsForPermissions } from "@/lib/ai/tools";
 import { checkAIRateLimit } from "@/lib/ai/rate-limit";
 import { academicContextRepository, emptyReadOnlyToolRepository, getAISettings, scopedReadOnlyToolRepository } from "@/lib/ai/repository";
 import { chatIdSchema, defaultChatTitle, effectiveContextSelection, sendMessageSchema } from "@/lib/ai/validation";
@@ -40,25 +41,41 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       getAISettings(userId),
     ]);
     if (!chat) return aiApiError("NOT_FOUND", "Chat no encontrado", 404);
-    const selection = effectiveContextSelection(settings.isAcademicContextEnabled, data.context);
+    if (!settings.isAIEnabled) return aiApiError("AI_DISABLED", "La IA está desactivada en tus ajustes.", 403);
+    const contextEnabled = settings.isAcademicContextEnabled && data.usePersonalContext;
+    const permissions = {
+      canReadGrades: settings.canReadGrades,
+      canReadTasksAndBosses: settings.canReadTasksAndBosses,
+      canReadSessionsAndStatistics: settings.canReadSessionsAndStatistics,
+      canReadSchedule: settings.canReadSchedule,
+      canReadMaterials: settings.canReadMaterials,
+      canReadGamification: settings.canReadGamification,
+    };
+    const selection = effectiveContextSelection(contextEnabled, data.context, permissions, settings.maxItemsPerCategory);
 
     const [historyDesc, academicContext] = await Promise.all([
       prisma.aIMessage.findMany({ where: { chatId, userId, status: "COMPLETE" }, select: { role: true, content: true }, orderBy: { createdAt: "desc" }, take: 40 }),
       buildAcademicContext({
         userId,
         isEnabled: settings.isAcademicContextEnabled,
+        usePersonalContext: data.usePersonalContext,
+        message: data.content,
         maxCharacters: settings.contextLimit,
+        maxItemsPerCategory: settings.maxItemsPerCategory,
         selection,
+        permissions,
         repository: academicContextRepository,
         loadMaterial: (storageKey) => getStorageProvider().get(storageKey),
       }),
     ]);
 
-    const snapshot = { selection, ...academicContext.snapshot, warnings: academicContext.warnings } as Prisma.InputJsonValue;
+    const plan = selectAcademicContextPlan({ message: data.content, selection: academicContext.selection, permissions });
+    const availableTools = contextEnabled ? toolDefinitionsForPermissions(permissions, plan.categories) : [];
+    const snapshot = { ...academicContext.snapshot, selection: academicContext.selection, warnings: academicContext.warnings } as Prisma.InputJsonValue;
     const shouldRename = chat.title === "Nuevo chat" && historyDesc.length === 0;
     const [userMessage, assistantMessage] = await prisma.$transaction([
       prisma.aIMessage.create({ data: { chatId, userId, role: "USER", content: data.content, status: "COMPLETE", contextSnapshot: snapshot }, select: { id: true, role: true, content: true, status: true, createdAt: true } }),
-      prisma.aIMessage.create({ data: { chatId, userId, role: "ASSISTANT", content: "", status: "PENDING", model: settings.model }, select: { id: true, role: true, content: true, status: true, createdAt: true } }),
+      prisma.aIMessage.create({ data: { chatId, userId, role: "ASSISTANT", content: "", status: "PENDING", model: settings.model, contextSnapshot: snapshot }, select: { id: true, role: true, content: true, status: true, model: true, errorCode: true, contextSnapshot: true, createdAt: true } }),
       prisma.aIChat.update({ where: { id: chatId }, data: { ...(shouldRename ? { title: defaultChatTitle(data.content) } : {}), updatedAt: new Date() } }),
     ]);
 
@@ -77,7 +94,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         try {
           let images = academicContext.images.map((image) => image.base64);
           let supportsTools = false;
-          if (settings.isAcademicContextEnabled && (images.length > 0 || selection.subjectIds.length + selection.taskIds.length + selection.bossIds.length + selection.gradeIds.length > 0)) {
+          if (contextEnabled && (images.length > 0 || availableTools.length > 0)) {
             try {
               const capabilities = await provider.getModelCapabilities({ baseUrl: settings.ollamaUrl, model: settings.model, timeoutMs: 5_000, signal: generationController.signal });
               supportsTools = capabilities.tools;
@@ -103,11 +120,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
             history,
             contextText: academicContext.text,
             images,
-            selection,
+            selection: academicContext.selection,
             userId,
-            toolRepository: settings.isAcademicContextEnabled ? scopedReadOnlyToolRepository(selection) : emptyReadOnlyToolRepository,
+            toolRepository: contextEnabled ? scopedReadOnlyToolRepository(academicContext.selection, permissions, settings.maxItemsPerCategory, academicContext.scopeSubjectIds) : emptyReadOnlyToolRepository,
             signal: generationController.signal,
             allowTools: supportsTools,
+            availableTools,
           })) {
             if (event.type === "text-delta") {
               if (assistantContent.length + event.content.length > MAX_ASSISTANT_CHARACTERS) throw new AIProviderError("PROVIDER_ERROR");
@@ -115,7 +133,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
               send({ type: "delta", content: event.content });
             } else usage = event.usage;
           }
-          const completed = await prisma.aIMessage.update({ where: { id: assistantMessage.id }, data: { content: assistantContent, status: "COMPLETE", inputTokens: usage?.inputTokens, outputTokens: usage?.outputTokens }, select: { id: true, role: true, content: true, status: true, model: true, errorCode: true, createdAt: true } });
+          const completed = await prisma.aIMessage.update({ where: { id: assistantMessage.id }, data: { content: assistantContent, status: "COMPLETE", inputTokens: usage?.inputTokens, outputTokens: usage?.outputTokens }, select: { id: true, role: true, content: true, status: true, model: true, errorCode: true, contextSnapshot: true, createdAt: true } });
           await prisma.aIChat.update({ where: { id: chatId }, data: { updatedAt: new Date() } });
           send({ type: "done", message: completed, warnings });
         } catch (error) {
