@@ -10,12 +10,13 @@ Se revisó que el núcleo académico permite crear, editar, consultar y borrar a
 
 Ejecutadas desde el árbol limpio basado en `main`:
 
-- `npm test`: 36 grupos, 211 pruebas correctas.
+- `npm test`: 37 grupos, 216 pruebas correctas.
 - `npm run lint`: correcto, sin avisos.
 - `npm run typecheck`: correcto.
 - `npm run build`: compilación de producción correcta y 28 rutas generadas.
 - `npx prisma validate --schema prisma/schema.prisma`: esquema válido.
 - `npx prisma format --schema prisma/schema.prisma --check`: formato correcto.
+- `npm run db:format:check`: formato correcto usando el ejecutable local de Prisma; el comando directo `prisma` no es reproducible en PowerShell de Windows porque no siempre está en el PATH.
 - `npx prisma migrate deploy`: sin migraciones pendientes.
 - `npx prisma migrate status`: base de datos al día.
 - `npm audit --audit-level=high`: 0 vulnerabilidades.
@@ -55,6 +56,9 @@ La pestaña final no registró errores ni avisos del navegador.
 - Cambiar de asignatura una tarea, un tema o un Boss con materiales asociados se rechaza con un mensaje claro. Si no hay materiales, el cambio sigue permitido. La comprobacion de pertenencia por cuenta se mantiene en todos los casos.
 - El navegador se recorrio con la cuenta temporal en Madrid y Nueva York. Se comprobaron las vistas de dia, semana y mes, las pantallas academicas y el detalle de una asignatura. La pestaña limpia usada para el recorrido final no registro errores ni avisos nuevos.
 - Esta ronda no necesito una migracion: no se cambio el esquema. `prisma migrate deploy` y `prisma migrate status` confirmaron que la base de datos sigue al dia.
+- El contador de materiales de un tema abre `/app/materials` con el identificador de ese tema. La consulta conserva `userId`, por lo que un identificador de otra cuenta devuelve cero materiales y no se muestra en los selectores.
+- Una clase habitual con cambios puntuales no puede cambiar de asignatura: el servidor lo comprueba con la cuenta autenticada y devuelve una explicación clara. Una clase sin cambios puntuales sí se puede cambiar.
+- Se añadió una prueba específica para cada camino del horario y para el filtro de materiales. No se cambió el comportamiento de la aplicación por el ajuste de Prisma.
 
 ## Seguridad y permisos
 

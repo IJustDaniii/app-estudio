@@ -17,6 +17,7 @@ import {
 } from "@/lib/domain/academic-rules";
 import { dateOnlyInputValue, normalizeTimeZone } from "@/lib/domain/dates";
 import { prisma } from "@/lib/prisma";
+import { topicMaterialsHref } from "@/lib/materials/links";
 import { formatDate as formatDateInZone, minutesLabel } from "@/lib/utils";
 
 const colors: Record<string, string> = {
@@ -263,7 +264,7 @@ export default async function SubjectDetailPage({
                   >
                     <span>{topic.name}</span>
                     <Link
-                      href={`/app/materials?subjectId=${subject.id}`}
+                      href={topicMaterialsHref(topic.id)}
                       className="text-xs text-primary hover:underline"
                     >
                       {topic._count.materials} materiales

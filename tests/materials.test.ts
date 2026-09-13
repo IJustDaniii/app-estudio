@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { materialDuplicateWhere, materialOwnershipWhere } from "@/lib/materials/queries";
 import { materialListArgs } from "@/lib/materials/listing";
+import { topicMaterialsHref } from "@/lib/materials/links";
 import { contentLengthExceedsMaterialBodyLimit, getMaterialRequestBodyLimit, limitMaterialRequestBody, MaterialBodyTooLargeError } from "@/lib/materials/body-limit";
 import { resolveMaterialSubjectId } from "@/lib/materials/references";
 import { materialResponseHeaders } from "@/lib/materials/preview";
@@ -89,6 +90,13 @@ describe("subida y validación de materiales", () => {
 });
 
 describe("aislamiento de materiales", () => {
+  it("abre los materiales del tema elegido y conserva el aislamiento por cuenta", () => {
+    const args = materialListArgs({ userId: "user-a", topicId: "topic-1", sort: "date", page: 1 });
+
+    expect(topicMaterialsHref("topic-1")).toBe("/app/materials?topicId=topic-1");
+    expect(args.where).toEqual({ userId: "user-a", AND: [{ topicId: "topic-1" }] });
+  });
+
   it("aplica filtros y ordenación antes de la ventana paginada", () => {
     const args = materialListArgs({ userId: "user-1", subjectId: "subject-1", filterSubjectId: "subject-1", query: "  álgebra  ".trim(), type: "EXAM", favorites: true, sort: "name", page: 3 });
     expect(args.where).toEqual({ userId: "user-1", AND: [{ subjectId: "subject-1" }, { subjectId: "subject-1" }, { name: { contains: "álgebra", mode: "insensitive" } }, { type: "EXAM" }, { isFavorite: true }] });

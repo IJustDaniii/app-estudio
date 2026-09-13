@@ -71,6 +71,9 @@ Prisma y validacion
 - [x] Fechas sin hora tratadas como dias de calendario para notas, objetivos y cambios puntuales de horario.
 - [x] El panel vuelve a leer XP y monedas despues de actualizar misiones, para mostrar la recompensa sin una recarga adicional.
 - [x] El cambio de asignatura de una tarea, tema o Boss con materiales asociados queda bloqueado con una explicacion clara; se mantienen las comprobaciones de cuenta.
+- [x] Los materiales abiertos desde el detalle de un tema se filtran por ese tema y por la cuenta autenticada.
+- [x] Una clase habitual con cambios puntuales no puede cambiar de asignatura hasta resolver esos cambios; una clase sin cambios sí se puede cambiar.
+- [x] La comprobación de formato de Prisma tiene un comando npm reproducible en Windows y se valida desde un árbol limpio.
 - [x] Pruebas completas, tipos, lint, compilacion, Prisma, dependencias, navegador y revision de permisos repetidos.
 
 ## Estado

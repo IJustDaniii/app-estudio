@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import type { ParsedAIAction } from "@/lib/ai/action-contract";
 import { prisma } from "@/lib/prisma";
+import { ensureTimetableEntrySubjectChangeAllowed } from "@/lib/domain/timetable-rules";
 import { ensureAcademicEntitySubjectChangeAllowed, ensureOwnedMaterialReferences } from "@/lib/materials/references";
 import { deleteMaterialWithCompensation } from "@/lib/materials/service";
 import { getStorageProvider } from "@/lib/materials/storage";
@@ -163,8 +164,12 @@ export async function executeAIAction(db: Database, userId: string, input: Parse
       return db.timetableEntry.create({ data: { ...actionData(data), userId } as Prisma.TimetableEntryUncheckedCreateInput, select: { id: true, dayOfWeek: true, startTime: true, endTime: true } });
     }
     case "update_timetable": {
-      await owned(db, userId, "timetableEntry", value.id as string);
-      if (value.subjectId) await ownedSubject(db, userId, value.subjectId as string);
+      const existing = await db.timetableEntry.findFirst({ where: { id: value.id as string, userId }, select: { id: true, subjectId: true } });
+      if (!existing) throw new Error("AI_ACTION_NOT_FOUND");
+      if (value.subjectId) {
+        await ownedSubject(db, userId, value.subjectId as string);
+        await ensureTimetableEntrySubjectChangeAllowed(db, userId, existing.id, existing.subjectId, value.subjectId as string);
+      }
       return updateResult((await db.timetableEntry.updateMany({ where: { id: value.id as string, userId }, data: actionData(value) as Prisma.TimetableEntryUpdateManyMutationInput })).count);
     }
     case "delete_timetable":

@@ -30,8 +30,11 @@
 - [x] Zona horaria comprobada con Madrid y Nueva York, incluyendo un cambio de dia cerca de medianoche.
 - [x] Recompensas de misiones comprobadas sin segunda recarga del panel.
 - [x] Coherencia y proteccion de materiales comprobadas al cambiar la asignatura de tareas, temas y Bosses.
+- [x] El contador de materiales de cada tema abre solo los materiales de ese tema y mantiene el aislamiento entre cuentas.
+- [x] El cambio de asignatura de una clase habitual se bloquea cuando tiene cambios puntuales y se permite cuando no los tiene.
+- [x] Prisma se comprueba con `npm run db:format:check`, también desde un árbol limpio de Windows.
 - [x] Cuenta de prueba aislada y eliminada tras el recorrido.
-- [x] 36 grupos y 211 pruebas automaticas correctas en la ronda final.
+- [x] 37 grupos y 216 pruebas automáticas correctas en la ronda final.
 
 ## Checkpoints
 

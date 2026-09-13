@@ -40,6 +40,7 @@ import {
   startEggIncubationForUser,
 } from "@/lib/pets/service";
 import { ensureAcademicEntitySubjectChangeAllowed } from "@/lib/materials/references";
+import { ensureTimetableEntrySubjectChangeAllowed } from "@/lib/domain/timetable-rules";
 import {
   bossSchema,
   goalSchema,
@@ -382,8 +383,16 @@ export async function deleteTimetableChange(formData: FormData) {
 export async function updateTimetableEntry(formData: FormData) {
   const userId = await requireUserId();
   const id = String(formData.get("id") ?? "");
+  const existing = await prisma.timetableEntry.findFirst({ where: { id, userId }, select: { subjectId: true } });
+  if (!existing) return;
   const data = timetableSchema.parse(formObject(formData));
   await ensureOwnedSubject(userId, data.subjectId);
+  try {
+    await ensureTimetableEntrySubjectChangeAllowed(prisma, userId, id, existing.subjectId, data.subjectId);
+  } catch (error) {
+    if (error instanceof Error && error.message === "TIMETABLE_ENTRY_SUBJECT_CHANGE_BLOCKED") redirect("/app/timetable?error=timetable-entry-subject-change");
+    throw error;
+  }
   await prisma.timetableEntry.updateMany({ where: { id, userId }, data });
   revalidatePath("/app/timetable");
   revalidatePath("/app");

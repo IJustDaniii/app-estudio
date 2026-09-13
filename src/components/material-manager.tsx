@@ -21,7 +21,7 @@ type MaterialItem = {
 
 type UploadLimits = { maxFiles: number; maxBatchSize: number };
 type MaterialFilters = { query: string; subjectId: string; type: MaterialTypeValue | ""; favorites: boolean; sort: "date" | "name" | "size" };
-type Props = { materials: MaterialItem[]; subjects: Option[]; topics: Option[]; tasks: Option[]; bosses: Option[]; initialMetadata?: typeof emptyMetadata; page?: number; hasNext?: boolean; context?: { subjectId: string | null; taskId: string | null; bossId: string | null }; filters?: MaterialFilters; uploadLimits?: UploadLimits };
+type Props = { materials: MaterialItem[]; subjects: Option[]; topics: Option[]; tasks: Option[]; bosses: Option[]; initialMetadata?: typeof emptyMetadata; page?: number; hasNext?: boolean; context?: { subjectId: string | null; topicId: string | null; taskId: string | null; bossId: string | null }; filters?: MaterialFilters; uploadLimits?: UploadLimits };
 
 const emptyMetadata: { subjectId: string; topicId: string; taskId: string; bossId: string; type: MaterialTypeValue; isFavorite: boolean; isCompletedExam: boolean } = { subjectId: "", topicId: "", taskId: "", bossId: "", type: "OTHER", isFavorite: false, isCompletedExam: false };
 const emptyFilters: MaterialFilters = { query: "", subjectId: "", type: "", favorites: false, sort: "date" };
@@ -108,7 +108,7 @@ function MaterialFields({ subjects, topics, tasks, bosses, values = emptyMetadat
   </div>;
 }
 
-export function MaterialManager({ materials, subjects, topics, tasks, bosses, initialMetadata = emptyMetadata, page = 1, hasNext = false, context = { subjectId: null, taskId: null, bossId: null }, filters = emptyFilters, uploadLimits = { maxFiles: DEFAULT_MAX_MATERIAL_FILES, maxBatchSize: DEFAULT_MAX_MATERIAL_BATCH_SIZE } }: Props) {
+export function MaterialManager({ materials, subjects, topics, tasks, bosses, initialMetadata = emptyMetadata, page = 1, hasNext = false, context = { subjectId: null, topicId: null, taskId: null, bossId: null }, filters = emptyFilters, uploadLimits = { maxFiles: DEFAULT_MAX_MATERIAL_FILES, maxBatchSize: DEFAULT_MAX_MATERIAL_BATCH_SIZE } }: Props) {
   const router = useRouter();
   const [files, setFiles] = useState<File[]>([]);
   const [message, setMessage] = useState("");
@@ -133,6 +133,7 @@ export function MaterialManager({ materials, subjects, topics, tasks, bosses, in
   function paginationHref(nextPage: number) {
     const params = new URLSearchParams();
     if (context.subjectId) params.set("subjectId", context.subjectId);
+    if (context.topicId) params.set("topicId", context.topicId);
     if (context.taskId) params.set("taskId", context.taskId);
     if (context.bossId) params.set("bossId", context.bossId);
     if (query) params.set("q", query);

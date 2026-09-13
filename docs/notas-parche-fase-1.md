@@ -17,6 +17,9 @@ Fecha de cierre: 13 de septiembre de 2026.
 - Zona horaria visible y configurable desde Cuenta.
 - Vista de mañana con clases, tareas pendientes y materiales necesarios.
 - Conversión segura de fechas y horas usando la zona horaria elegida por cada cuenta, con pruebas cerca de medianoche en Madrid y Nueva York.
+- Enlaces desde cada tema a sus propios materiales, manteniendo la cuenta autenticada como filtro.
+- Mensaje claro y bloqueo seguro al cambiar de asignatura una clase habitual que tiene cambios puntuales.
+- Comando `npm run db:format:check` para comprobar Prisma de forma reproducible en Windows.
 
 ## Corregido
 
@@ -26,6 +29,8 @@ Fecha de cierre: 13 de septiembre de 2026.
 - La edición de una tarea fija vencida no puede esquivar la protección cambiando su modalidad.
 - Las notas, objetivos y cambios puntuales de horario conservan el día escrito, sin desplazarse al cambiar de zona.
 - Un cambio de asignatura que dejaría materiales incoherentes se bloquea y explica cómo resolverlo.
+- El detalle de una asignatura ya no abre todos los materiales de la asignatura al pulsar el contador de un tema: abre únicamente los de ese tema.
+- El servidor evita que una clase habitual deje cambios puntuales incoherentes; si no hay cambios puntuales, la edición sigue funcionando.
 
 ## Solucionado
 
@@ -37,7 +42,7 @@ Fecha de cierre: 13 de septiembre de 2026.
 
 ## Pruebas realizadas
 
-- 36 grupos de pruebas y 211 pruebas automáticas: todas correctas.
+- 37 grupos de pruebas y 216 pruebas automáticas: todas correctas.
 - Lint sin avisos, revisión de tipos correcta y compilación de producción correcta.
 - Prisma: esquema válido, formato correcto, migraciones desplegadas y sin migraciones pendientes.
 - Auditoría de dependencias: 0 vulnerabilidades con `npm audit --audit-level=high`.
@@ -45,6 +50,8 @@ Fecha de cierre: 13 de septiembre de 2026.
 - La pestaña final de comprobación no mostró errores ni avisos del navegador.
 - Revisión final de permisos: las lecturas y modificaciones académicas usan la cuenta autenticada; las asociaciones también comprueban la cuenta propietaria.
 - Pruebas específicas de zona horaria, recompensa inmediata y cambio de asignatura con materiales: correctas.
+- Pruebas específicas del filtro de materiales por tema, con `userId`, y de clases habituales con y sin cambios puntuales: correctas.
+- Comprobación reproducible de formato Prisma mediante el comando npm desde un árbol limpio de Windows: correcta.
 
 ## Cambios en la base de datos
 

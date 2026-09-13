@@ -6,6 +6,7 @@ export type MaterialListSort = "date" | "name" | "size";
 export type MaterialListInput = {
   userId: string;
   subjectId?: string;
+  topicId?: string;
   taskId?: string;
   bossId?: string;
   filterSubjectId?: string;
@@ -18,6 +19,7 @@ export type MaterialListInput = {
 
 export function materialListArgs(input: MaterialListInput) {
   const and: Prisma.MaterialWhereInput[] = [];
+  if (input.topicId) and.push({ topicId: input.topicId });
   if (input.taskId) and.push({ taskId: input.taskId });
   else if (input.bossId) and.push({ bossId: input.bossId });
   else if (input.subjectId) and.push({ subjectId: input.subjectId });

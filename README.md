@@ -65,7 +65,7 @@ npm run lint
 npm run typecheck
 npm run build
 npx prisma validate --schema prisma/schema.prisma
-npx prisma format --schema prisma/schema.prisma --check
+npm run db:format:check
 npm audit --audit-level=high
 ```
 

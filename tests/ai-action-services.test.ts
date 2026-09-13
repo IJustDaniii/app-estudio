@@ -3,10 +3,12 @@ import { parseAIAction } from "@/lib/ai/action-contract";
 
 const ensureReferences = vi.hoisted(() => vi.fn());
 const ensureSubjectChange = vi.hoisted(() => vi.fn());
+const ensureTimetableSubjectChange = vi.hoisted(() => vi.fn());
 const deleteWithCompensation = vi.hoisted(() => vi.fn());
 const storageProvider = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/prisma", () => ({ prisma: {} }));
+vi.mock("@/lib/domain/timetable-rules", () => ({ ensureTimetableEntrySubjectChangeAllowed: ensureTimetableSubjectChange }));
 vi.mock("@/lib/materials/references", () => ({ ensureOwnedMaterialReferences: ensureReferences, ensureAcademicEntitySubjectChangeAllowed: ensureSubjectChange }));
 vi.mock("@/lib/materials/service", () => ({ deleteMaterialWithCompensation: deleteWithCompensation }));
 vi.mock("@/lib/materials/storage", () => ({ getStorageProvider: storageProvider }));
@@ -19,6 +21,7 @@ describe("servicios de acciones de IA", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     ensureReferences.mockImplementation(async (_userId: string, values: unknown) => values);
+    ensureTimetableSubjectChange.mockResolvedValue(undefined);
     deleteWithCompensation.mockImplementation(async (_storage: unknown, _key: string, removeMetadata: () => Promise<void>) => removeMetadata());
     storageProvider.mockReturnValue({});
   });
@@ -67,5 +70,17 @@ describe("servicios de acciones de IA", () => {
 
     expect(deleteWithCompensation).toHaveBeenCalledWith(storage, "materials/user-a/file", expect.any(Function));
     expect(materialDelete).toHaveBeenCalledWith({ where: { id } });
+  });
+
+  it("aplica la protección de cambios puntuales también a una propuesta de horario", async () => {
+    const timetableFindFirst = vi.fn().mockResolvedValue({ id, subjectId: "subject-a" });
+    const subjectFindFirst = vi.fn().mockResolvedValue({ id });
+    const timetableUpdateMany = vi.fn();
+    ensureTimetableSubjectChange.mockRejectedValue(new Error("TIMETABLE_ENTRY_SUBJECT_CHANGE_BLOCKED"));
+    const db = { timetableEntry: { findFirst: timetableFindFirst, updateMany: timetableUpdateMany }, subject: { findFirst: subjectFindFirst } };
+
+    await expect(executeAIAction(db as never, "user-a", parseAIAction("update_timetable", { id, subjectId: id }))).rejects.toThrow("TIMETABLE_ENTRY_SUBJECT_CHANGE_BLOCKED");
+    expect(ensureTimetableSubjectChange).toHaveBeenCalledWith(db, "user-a", id, "subject-a", id);
+    expect(timetableUpdateMany).not.toHaveBeenCalled();
   });
 });

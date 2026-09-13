@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { localDateInputValue, normalizeTimeZone } from "@/lib/domain/dates";
+import { timetableSubjectChangeMessage } from "@/lib/domain/timetable-rules";
 import { prisma } from "@/lib/prisma";
 import { formatDateOnly } from "@/lib/utils";
 
@@ -28,8 +29,9 @@ function todayInputValue(timeZone: string) {
   return localDateInputValue(new Date(), timeZone);
 }
 
-export default async function TimetablePage() {
+export default async function TimetablePage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const userId = await requireUserId();
+  const params = await searchParams;
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
     select: { timezone: true },
@@ -61,6 +63,7 @@ export default async function TimetablePage() {
         description="Configura tus clases habituales y los cambios puntuales que solo afectan a una fecha."
       />
       <p className="text-sm text-muted-foreground">Las fechas de cambios puntuales usan la zona horaria de tu cuenta: <span className="font-medium text-foreground">{timeZone}</span>.</p>
+      {params.error === "timetable-entry-subject-change" && <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">{timetableSubjectChangeMessage}</p>}
       {subjects.length ? (
         <>
           <CreatePanel label="Añadir clase habitual">
