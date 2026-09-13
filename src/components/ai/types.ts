@@ -4,7 +4,7 @@ import type { AIAcademicPermissions, ContextSelection } from "@/lib/ai/validatio
 export type ChatSummary = { id: string; title: string; createdAt: string; updatedAt: string };
 export type ChatMessage = { id: string; role: "USER" | "ASSISTANT"; content: string; status: "PENDING" | "COMPLETE" | "ERROR"; model?: string | null; errorCode?: string | null; contextSnapshot?: AIContextSnapshot | null; createdAt: string };
 export type Pagination = { page: number; pageSize: number; totalItems: number; totalPages: number; hasPrevious?: boolean; hasNext?: boolean };
-export type AISettingsValue = { ollamaUrl: string; model: string; isAIEnabled: boolean; isAcademicContextEnabled: boolean; canUseInternet: boolean; contextLimit: number; maxItemsPerCategory: number } & AIAcademicPermissions;
+export type AISettingsValue = { ollamaUrl: string; model: string; isAIEnabled: boolean; isAcademicContextEnabled: boolean; contextLimit: number; maxItemsPerCategory: number } & AIAcademicPermissions;
 export type ContextOption = { id: string; label: string; mimeType?: string };
 export type ContextOptions = {
   subjects: ContextOption[];

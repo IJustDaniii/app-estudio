@@ -13,7 +13,7 @@ Las intenciones de horario semanal se limitan a horario y calendario. El texto d
 
 Los materiales se limitan a metadatos salvo que la pregunta solicite analisis. El procesamiento tiene limites por archivo, lote, tiempo, concurrencia, imagenes y bytes, y registra los elementos que no se analizaron. Los datos de materiales se tratan como referencias no confiables y no pueden cambiar las instrucciones del sistema.
 
-Las herramientas de lectura y la busqueda web reciben repositorios acotados, nunca Prisma. Internet requiere permiso global y consentimiento por mensaje; solo recibe una consulta textual, usa HTTPS publico y devuelve enlaces saneados. No recibe contexto personal ni archivos.
+Las herramientas de lectura y la busqueda web reciben repositorios acotados, nunca Prisma. Internet requiere consentimiento explicito por mensaje desde la barra inferior; solo recibe una consulta textual, usa HTTPS publico y devuelve enlaces saneados. No recibe contexto personal ni archivos.
 
 Las acciones de escritura se representan como propuestas persistentes. Se validan con los esquemas existentes, comprueban pertenencia, se auditan y requieren un token de confirmacion de un solo uso. No se permiten cambios de XP, monedas, nivel, racha, recompensas, logros, estadisticas ni finalizaciones artificiales. Las sesiones se mantienen en el temporizador porque sus escrituras activan estadisticas y recompensas.
 

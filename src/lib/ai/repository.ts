@@ -189,7 +189,7 @@ export async function getAISettings(userId: string) {
     const model = aiModelSchema.safeParse(stored.model).data;
     const contextLimit = Number.isSafeInteger(stored.contextLimit) && stored.contextLimit >= 1_000 && stored.contextLimit <= 50_000 ? stored.contextLimit : DEFAULT_AI_CONTEXT_LIMIT;
     const maxItemsPerCategory = Number.isSafeInteger(stored.maxItemsPerCategory) && stored.maxItemsPerCategory >= 1 && stored.maxItemsPerCategory <= 50 ? stored.maxItemsPerCategory : DEFAULT_AI_CONTEXT_ITEM_LIMIT;
-    return { ...stored, ollamaUrl: ollamaUrl ?? DEFAULT_OLLAMA_URL, model: model ?? DEFAULT_AI_MODEL, canUseInternet: stored.canUseInternet ?? false, contextLimit, maxItemsPerCategory };
+    return { ...stored, ollamaUrl: ollamaUrl ?? DEFAULT_OLLAMA_URL, model: model ?? DEFAULT_AI_MODEL, contextLimit, maxItemsPerCategory };
   }
   return {
     userId,
@@ -199,7 +199,6 @@ export async function getAISettings(userId: string) {
     isAIEnabled: true,
     isAcademicContextEnabled: true,
     ...defaultAIAcademicPermissions,
-    canUseInternet: false,
     contextLimit: DEFAULT_AI_CONTEXT_LIMIT,
     maxItemsPerCategory: DEFAULT_AI_CONTEXT_ITEM_LIMIT,
     createdAt: new Date(0),

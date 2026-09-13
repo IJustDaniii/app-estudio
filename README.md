@@ -21,7 +21,7 @@ Los materiales se leen desde el almacenamiento privado solo cuando la pregunta l
 
 ### Internet
 
-La busqueda web se puede habilitar en Ajustes y debe permitirse de nuevo en cada mensaje. Devuelve resultados con titulo, dominio y enlace, diferenciados del contexto de la aplicacion. Tiene limite de consulta, tiempo, respuesta, frecuencia y dominios configurables mediante `AI_WEB_ALLOWED_DOMAINS`.
+La busqueda web se permite unicamente al marcar la casilla de la barra inferior del chat en ese mensaje. Devuelve resultados con titulo, dominio y enlace, diferenciados del contexto de la aplicacion. Tiene limite de consulta, tiempo, respuesta, frecuencia y dominios configurables mediante `AI_WEB_ALLOWED_DOMAINS`.
 
 La busqueda solo usa HTTPS publico, rechaza localhost, redes privadas, rangos reservados, credenciales, puertos y redirecciones. No recibe contexto personal ni archivos de la aplicacion. Si no esta disponible, el asistente lo explica y continua con una respuesta basada en los datos de Aula 1B.
 

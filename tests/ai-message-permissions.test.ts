@@ -124,4 +124,31 @@ describe("acceso al chat de IA", () => {
     expect(messageCreate).not.toHaveBeenCalled();
     expect(providerFactory).not.toHaveBeenCalled();
   });
+
+  it("permite la busqueda web solo con la casilla de la barra del chat", async () => {
+    getAISettingsMock.mockResolvedValue({
+      provider: "OLLAMA", ollamaUrl: "http://127.0.0.1:11434", model: "qwen3.5:9b", isAIEnabled: true, isAcademicContextEnabled: true,
+      canReadGrades: true, canReadTasksAndBosses: true, canReadSessionsAndStatistics: true, canReadSchedule: true, canReadMaterials: true, canReadGamification: true,
+      contextLimit: 12_000, maxItemsPerCategory: 20,
+    });
+    messageFindMany.mockResolvedValue([]);
+    messageFindFirst.mockResolvedValue(null);
+    messageCreate.mockImplementation(async ({ data }: { data: { role: string } }) => ({ id: data.role === "ASSISTANT" ? "assistant-web" : "user-web", role: data.role, content: "", status: data.role === "ASSISTANT" ? "PENDING" : "COMPLETE", model: "qwen3.5:9b", errorCode: null, contextSnapshot: null, createdAt: new Date() }));
+    messageUpdate.mockResolvedValue({ id: "assistant-web", role: "ASSISTANT", content: "ok", status: "COMPLETE", model: "qwen3.5:9b", errorCode: null, contextSnapshot: null, createdAt: new Date() });
+    chatUpdate.mockResolvedValue({});
+    let receivedTools: string[] | undefined;
+    providerFactory.mockReturnValue({
+      getModelCapabilities: vi.fn().mockResolvedValue({ vision: false, tools: true }),
+      async *streamChat(input: { tools?: Array<{ name: string }> }) {
+        receivedTools = input.tools?.map((tool) => tool.name);
+        yield { type: "text-delta", content: "ok" };
+        yield { type: "done", usage: {} };
+      },
+    });
+
+    const response = await POST(new Request("http://localhost/api/ai/chats/cm0000000000000000000000/messages", { method: "POST", body: JSON.stringify({ content: "Busca en internet informacion actualizada", allowInternet: true }), headers: { "content-type": "application/json" } }), { params: Promise.resolve({ id: "cm0000000000000000000000" }) });
+    await response.text();
+
+    expect(receivedTools).toContain("search_web");
+  });
 });

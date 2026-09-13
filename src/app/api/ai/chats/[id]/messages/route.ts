@@ -55,7 +55,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     if (!isNewChat && !existingChat) return aiApiError("NOT_FOUND", "Chat no encontrado", 404);
     if (!settings.isAIEnabled) return aiApiError("AI_DISABLED", "La IA está desactivada en tus ajustes.", 403);
     const contextEnabled = settings.isAcademicContextEnabled && data.usePersonalContext;
-    const internetEnabled = Boolean(settings.canUseInternet && data.allowInternet);
+    const internetEnabled = data.allowInternet;
     const timeZone = contextEnabled ? await getUserTimezone(userId) : DEFAULT_TIME_ZONE;
     const now = new Date();
     const permissions = {

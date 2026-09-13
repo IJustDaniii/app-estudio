@@ -2,11 +2,26 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { mergeChatList } from "@/components/ai/ai-workspace";
+import { AISettingsPanel } from "@/components/ai/ai-settings-panel";
 import { ContextPicker } from "@/components/ai/context-picker";
 import { MessageList } from "@/components/ai/message-list";
 import { emptyContextSelection } from "@/lib/ai/validation";
 
 describe("interfaz de IA", () => {
+  it("no muestra un permiso web separado dentro de Preferencias", () => {
+    const markup = renderToStaticMarkup(createElement(AISettingsPanel, {
+      value: {
+        ollamaUrl: "http://127.0.0.1:11434", model: "qwen3.5:9b", isAIEnabled: true, isAcademicContextEnabled: true,
+        canReadGrades: true, canReadTasksAndBosses: true, canReadSessionsAndStatistics: true, canReadSchedule: true,
+        canReadMaterials: true, canReadGamification: true, contextLimit: 12_000, maxItemsPerCategory: 20,
+      },
+      connection: { status: "online", message: "Conectado" }, busy: false,
+      onChange: () => undefined, onSave: async () => undefined, onTest: async () => undefined,
+    }));
+
+    expect(markup).not.toContain("Permitir busquedas web cuando las active en un mensaje");
+  });
+
   it("mantiene un solo chat cuando llega otra respuesta del mismo chat", () => {
     const existing = { id: "cm0000000000000000000000", title: "Primera pregunta", createdAt: "2026-09-13T00:00:00.000Z", updatedAt: "2026-09-13T00:00:00.000Z" };
     const refreshed = { ...existing, title: "Primera pregunta actualizada", updatedAt: "2026-09-13T00:01:00.000Z" };
