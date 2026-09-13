@@ -11,7 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { DEMO_SUBJECTS } from "@/lib/demo-subjects";
 import { rewardsForStudyMinutes, taskCompletionReward } from "@/lib/domain/progress";
 import { refreshDailyMissionsForUser } from "@/lib/domain/missions-service";
-import { createStudyStartToken, StudySessionError, validateServerStudySession, verifyStudyStartToken, type StudySessionErrorCode } from "@/lib/domain/study-session";
+import { createStudyStartToken, sameStudySessionRequest, StudySessionError, validateServerStudySession, verifyStudyStartToken, type StudySessionErrorCode } from "@/lib/domain/study-session";
 import { withSerializableRetry } from "@/lib/domain/transactions";
 import { PET_RARITY_CONFIG } from "@/lib/pets/config";
 import { applyAcademicPetProgress, hatchEggForUser, purchaseCosmeticForUser, purchaseEggForUser, setActivePetForUser, startEggIncubationForUser } from "@/lib/pets/service";
@@ -275,7 +275,7 @@ export async function recordStudySession(_state: StudySessionActionState, formDa
   } catch (error) {
     if (!isStudySessionDuplicate(error)) throw error;
     const existing = await prisma.studySession.findFirst({ where: { userId, requestId: data.requestId } });
-    if (!existing || existing.startedAt.getTime() !== sessionData.startedAt.getTime() || existing.plannedMinutes !== sessionData.plannedMinutes || existing.subjectId !== subjectId || existing.taskId !== taskId) {
+    if (!existing || !sameStudySessionRequest(existing, { ...sessionData, subjectId, taskId })) {
       return { error: "La misma petición se ha usado con datos diferentes." };
     }
     await refreshDailyMissionsForUser(userId);

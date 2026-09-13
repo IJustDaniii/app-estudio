@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createStudyStartToken,
+  sameStudySessionRequest,
   StudySessionError,
   validateServerStudySession,
   verifyStudyStartToken,
@@ -52,5 +53,12 @@ describe("sesiones de estudio verificadas por servidor", () => {
 
   it("rechaza una sesión que queda abierta más allá del margen permitido", () => {
     expect(() => validateServerStudySession({ startedAt, plannedMinutes: 25, actualMinutes: 25 }, new Date("2026-09-13T10:26:01.000Z"))).toThrowError(new StudySessionError("STUDY_SESSION_TOO_LONG"));
+  });
+
+  it("rechaza una repetición con el mismo identificador si cambia los minutos", () => {
+    expect(sameStudySessionRequest(
+      { startedAt, plannedMinutes: 25, actualMinutes: 10, subjectId: null, taskId: null },
+      { startedAt, plannedMinutes: 25, actualMinutes: 11, subjectId: null, taskId: null },
+    )).toBe(false);
   });
 });

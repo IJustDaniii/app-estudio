@@ -44,10 +44,19 @@ npm test
 npm run lint
 npm run typecheck
 npm run build
-npx prisma validate
+npx prisma validate --schema prisma/schema.prisma
+npx prisma format --schema prisma/schema.prisma --check
 npm audit --audit-level=high
 ```
 
 Las comprobaciones de Prisma necesitan `DATABASE_URL`. El archivo `.env` local no se sube al repositorio; usa tu configuración local o la de `.env.example`.
 
-Las pruebas específicas están en `tests/missions.test.ts`, `tests/study-session.test.ts`, `tests/progress.test.ts` y `tests/validation.test.ts`.
+Las pruebas específicas están en `tests/missions.test.ts`, `tests/study-session.test.ts`, `tests/study-session-action.test.ts`, `tests/transactions.test.ts`, `tests/progress.test.ts` y `tests/validation.test.ts`.
+
+## Comprobación real de la base de datos
+
+En este ordenador, PostgreSQL estaba disponible y la base `aula_1b` ya contenía la columna `StudySession.requestId` y su índice único porque una migración de otro trabajo previo ya los había creado. El primer `prisma migrate deploy` se detuvo con `P3018` al intentar crearlos de nuevo.
+
+Se verificó directamente que la columna y el índice coincidían con esta migración, sin modificar los campos de mascotas del otro trabajo. Después se ejecutó `prisma migrate resolve --applied 20260913200000_phase0_integrity`. Finalmente, `prisma migrate status` informó que el esquema estaba al día y `prisma migrate deploy` informó que no quedaban migraciones pendientes.
+
+La prueba temporal de persistencia creó un usuario aislado y lo eliminó al terminar. Guardó dos sesiones, rechazó una repetición con minutos distintos con `P2002`, mantuvo una sola sesión y el saldo no cambió. Las dos misiones se completaron y pagaron una vez; repetir la actualización dejó el saldo igual.

@@ -64,7 +64,8 @@ npm test
 npm run lint
 npm run typecheck
 npm run build
-npx prisma validate
+npx prisma validate --schema prisma/schema.prisma
+npx prisma format --schema prisma/schema.prisma --check
 npm audit --audit-level=high
 ```
 
@@ -82,11 +83,11 @@ Las reglas activas de XP, monedas, niveles, rachas y misiones, junto con la prot
 
 Las pautas siguen la documentacion oficial de [Next.js](https://nextjs.org/docs), [Ollama](https://docs.ollama.com/api/chat), [Auth.js](https://authjs.dev/), [Prisma](https://www.prisma.io/docs) y [Tailwind](https://tailwindcss.com/docs).
 
-## Decisiones pendientes
+## Fuera del alcance de la Fase 0
 
-- Revisión futura de las cifras provisionales de XP, niveles, monedas, racha y recompensas; las reglas actuales están definidas en la documentación de la Fase 0.
+- Las cifras de XP, niveles, monedas, racha y recompensas son las reglas actuales de esta fase; cualquier cambio futuro requerirá una fase posterior.
 - Reglas para redistribuir actividades de estudio flexibles.
-- Recuperacion de contrasena, verificacion de email y despliegue.
-- Sincronizacion offline de datos.
+- Recuperación de contraseña, verificación de email y despliegue.
+- Sincronización offline de datos.
 
 Las mascotas, los huevos y la tienda básica pertenecen a la Fase 3 ya existente. No se incluyen tienda avanzada, temporadas, Teams, funciones sociales, flashcards ni integraciones externas adicionales.

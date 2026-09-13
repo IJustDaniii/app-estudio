@@ -21,6 +21,11 @@ export type ValidatedStudySession = {
   actualMinutes: number;
 };
 
+export type StudySessionRequestData = Pick<ValidatedStudySession, "startedAt" | "plannedMinutes" | "actualMinutes"> & {
+  subjectId: string | null;
+  taskId: string | null;
+};
+
 export type StudySessionErrorCode =
   | "AUTH_SECRET_MISSING"
   | "INVALID_START_TOKEN"
@@ -38,6 +43,15 @@ export class StudySessionError extends Error {
     super(code);
     this.name = "StudySessionError";
   }
+}
+
+/** Compares a replay with the stored session, including all reward-affecting values. */
+export function sameStudySessionRequest(existing: StudySessionRequestData, submitted: StudySessionRequestData) {
+  return existing.startedAt.getTime() === submitted.startedAt.getTime()
+    && existing.plannedMinutes === submitted.plannedMinutes
+    && existing.actualMinutes === submitted.actualMinutes
+    && existing.subjectId === submitted.subjectId
+    && existing.taskId === submitted.taskId;
 }
 
 function requireSecret(secret: string) {

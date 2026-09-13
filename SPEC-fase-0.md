@@ -34,7 +34,7 @@ No se añaden tienda avanzada, temporadas, funciones sociales, nuevas recompensa
 - Lint: `npm run lint`
 - Tipos: `npm run typecheck`
 - Compilación: `npm run build`
-- Prisma: `npx prisma validate`
+- Prisma: `npx prisma validate --schema prisma/schema.prisma` y `npx prisma format --schema prisma/schema.prisma --check`
 - Dependencias: `npm audit --audit-level=high`
 
 ## Criterios de éxito
