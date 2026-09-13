@@ -1,8 +1,8 @@
 "use client";
 
-import { ChangeEvent, DragEvent, FormEvent, useMemo, useState } from "react";
+import { ChangeEvent, DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Download, FileText, Heart, ImageIcon, Pencil, Star, Trash2, Upload } from "lucide-react";
+import { Download, FileText, Heart, ImageIcon, Pencil, Star, Trash2, Upload, X } from "lucide-react";
 import { DEFAULT_MAX_MATERIAL_BATCH_SIZE, DEFAULT_MAX_MATERIAL_FILES, MATERIAL_TYPE_LABELS, MATERIAL_TYPES, isPreviewableMimeType, type MaterialTypeValue } from "@/lib/materials/constants";
 import { appendMaterialFiles, resetMaterialUploadForm } from "@/lib/materials/upload";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,64 @@ function bytes(size: number) {
 
 function associationLabel(material: MaterialItem) {
   return [material.subject?.name, material.topic?.name, material.task?.title, material.boss?.title].filter(Boolean).join(" · ") || "Sin relación";
+}
+
+function MaterialImagePreview({ material }: { material: MaterialItem }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
+  const restoreFocusRef = useRef(false);
+  const previewUrl = `/api/materials/${material.id}?preview=1`;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsOpen(false);
+      if (event.key === "Tab") {
+        const focusable = [closeRef.current, imageRef.current].filter((element): element is HTMLButtonElement | HTMLImageElement => Boolean(element));
+        const currentIndex = focusable.indexOf(document.activeElement as HTMLButtonElement | HTMLImageElement);
+        const nextIndex = event.shiftKey
+          ? currentIndex <= 0 ? focusable.length - 1 : currentIndex - 1
+          : currentIndex === focusable.length - 1 ? 0 : currentIndex + 1;
+        event.preventDefault();
+        focusable[nextIndex]?.focus();
+      }
+    };
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen) {
+      restoreFocusRef.current = true;
+      closeRef.current?.focus();
+    } else if (restoreFocusRef.current) {
+      restoreFocusRef.current = false;
+      triggerRef.current?.focus();
+    }
+  }, [isOpen]);
+
+  return <>
+    <div className="mt-3 flex max-h-[28rem] min-h-24 w-full items-center justify-center overflow-auto rounded-lg border bg-muted/40 p-3">
+      <button ref={triggerRef} type="button" className="max-w-full min-w-0 cursor-zoom-in rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" onClick={() => setIsOpen(true)} aria-label={`Ampliar vista previa de ${material.name}`}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={previewUrl} alt={`Vista previa de ${material.name}`} className="block h-auto w-auto max-h-[26rem] max-w-full object-contain" />
+      </button>
+    </div>
+    {isOpen && <div role="dialog" aria-modal="true" aria-label={`Vista ampliada de ${material.name}`} className="fixed inset-0 z-50 flex items-center justify-center overflow-auto bg-black/80 p-4">
+      <button ref={closeRef} type="button" className="absolute right-4 top-4 grid size-10 place-items-center rounded-full bg-white/90 text-foreground shadow-lg hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" onClick={() => setIsOpen(false)} aria-label="Cerrar vista previa">
+        <X className="size-5" aria-hidden="true" />
+      </button>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img ref={imageRef} tabIndex={0} src={previewUrl} alt={`Vista previa ampliada de ${material.name}`} aria-label={`Imagen ampliada de ${material.name}`} className="h-auto w-auto max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] object-contain" />
+    </div>}
+  </>;
 }
 
 function MaterialFields({ subjects, topics, tasks, bosses, values = emptyMetadata, prefix = "new" }: Omit<Props, "materials"> & { values?: typeof emptyMetadata; prefix?: string }) {
@@ -151,7 +209,7 @@ export function MaterialManager({ materials, subjects, topics, tasks, bosses, in
       const values = { subjectId: material.subjectId ?? "", topicId: material.topicId ?? "", taskId: material.taskId ?? "", bossId: material.bossId ?? "", type: material.type, isFavorite: material.isFavorite, isCompletedExam: material.isCompletedExam };
       const baseValues = { ...values, name: material.name, description: material.description ?? "" };
       return <li key={material.id} className="rounded-xl border bg-card p-4"><div className="flex flex-wrap items-start gap-3"><span className="grid size-9 place-items-center rounded-lg bg-primary/10 text-primary">{material.mimeType.startsWith("image/") ? <ImageIcon className="size-4" /> : <FileText className="size-4" />}</span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="truncate text-sm font-medium">{material.name}</p>{material.isFavorite && <Star className="size-4 fill-amber-400 text-amber-400" aria-label="Favorito" />}{material.isCompletedExam && <span className="text-xs font-medium text-primary">Examen realizado</span>}</div><p className="mt-1 truncate text-xs text-muted-foreground">{material.originalName} · {bytes(material.size)} · {MATERIAL_TYPE_LABELS[material.type]}</p><p className="mt-1 text-xs text-muted-foreground">{associationLabel(material)}</p></div><div className="flex gap-1"><Button asChild variant="ghost" size="icon"><a href={`/api/materials/${material.id}`} aria-label={`Descargar ${material.name}`}><Download className="size-4" /></a></Button><Button type="button" variant="ghost" size="icon" aria-label={`Marcar ${material.name} como favorito`} onClick={() => update(material.id, { ...baseValues, isFavorite: !material.isFavorite })}><Heart className={material.isFavorite ? "size-4 fill-current" : "size-4"} /></Button><Button type="button" variant="ghost" size="icon" aria-label={`Eliminar ${material.name}`} onClick={() => remove(material.id)}><Trash2 className="size-4" /></Button></div></div>
-        {isPreviewableMimeType(material.mimeType) && <details className="mt-3"><summary className="cursor-pointer text-sm text-primary">Vista previa</summary><object className="mt-3 h-80 w-full rounded-lg border bg-muted" data={`/api/materials/${material.id}?preview=1`} type={material.mimeType}><a className="text-sm text-primary" href={`/api/materials/${material.id}`}>Descargar archivo</a></object></details>}
+        {isPreviewableMimeType(material.mimeType) && <details className="mt-3"><summary className="cursor-pointer text-sm text-primary">Vista previa</summary>{material.mimeType.startsWith("image/") ? <MaterialImagePreview material={material} /> : <object className="mt-3 h-80 w-full rounded-lg border bg-muted" data={`/api/materials/${material.id}?preview=1`} type={material.mimeType}><a className="text-sm text-primary" href={`/api/materials/${material.id}`}>Descargar archivo</a></object>}</details>}
         <details className="mt-3"><summary className="inline-flex cursor-pointer items-center gap-2 text-sm text-primary"><Pencil className="size-3.5" /> Editar</summary><form onSubmit={(event) => submitEdit(event, material.id)} className="mt-3 space-y-3"><div><Label htmlFor={`material-name-${material.id}`}>Nombre</Label><Input id={`material-name-${material.id}`} name="name" defaultValue={material.name} maxLength={160} required /></div><div><Label htmlFor={`material-description-${material.id}`}>Descripción</Label><Textarea id={`material-description-${material.id}`} name="description" defaultValue={material.description ?? ""} maxLength={2000} /></div><MaterialFields subjects={subjects} topics={topics} tasks={tasks} bosses={bosses} values={values} prefix={material.id} /><Button type="submit">Guardar cambios</Button></form></details>
       </li>;
     })}</ul> : <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">No hay materiales que coincidan con los filtros.</p>}

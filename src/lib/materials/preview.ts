@@ -8,7 +8,7 @@ export function materialResponseHeaders(input: { mimeType: string; size: number;
     "X-Frame-Options": input.preview ? "SAMEORIGIN" : "DENY",
   });
   if (input.preview) {
-    headers.set("Content-Security-Policy", `default-src 'none'; object-src 'self'; frame-ancestors 'self'; plugin-types ${input.mimeType}`);
+    headers.set("Content-Security-Policy", `default-src 'none'; img-src 'self'; object-src 'self'; frame-ancestors 'self'; plugin-types ${input.mimeType}`);
   }
   return headers;
 }

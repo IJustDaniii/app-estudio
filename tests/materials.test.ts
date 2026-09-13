@@ -137,6 +137,7 @@ describe("consistencia y preview", () => {
     expect(preview.get("Cache-Control")).toBe("private, no-store");
     expect(preview.get("X-Content-Type-Options")).toBe("nosniff");
     expect(preview.get("X-Frame-Options")).toBe("SAMEORIGIN");
+    expect(preview.get("Content-Security-Policy")).toContain("img-src 'self'");
     expect(preview.get("Content-Security-Policy")).toContain("object-src 'self'");
     expect(preview.get("Content-Disposition")).toContain("inline");
     const download = materialResponseHeaders({ mimeType: "application/pdf", size: 8, originalName: "tema.pdf", preview: false });
