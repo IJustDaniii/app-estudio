@@ -153,23 +153,29 @@ export async function createTopic(formData: FormData) {
   await ensureOwnedSubject(userId, data.subjectId);
   await prisma.topic.create({ data: { ...data, userId } });
   revalidatePath("/app/subjects");
+  revalidatePath(`/app/subjects/${data.subjectId}`);
 }
 
 export async function updateTopic(formData: FormData) {
   const userId = await requireUserId();
   const id = z.string().cuid().parse(String(formData.get("id") ?? ""));
+  const existing = await prisma.topic.findFirst({ where: { id, userId }, select: { subjectId: true } });
+  if (!existing) return;
   const data = topicSchema.parse(formObject(formData));
   await ensureOwnedSubject(userId, data.subjectId);
   await prisma.topic.updateMany({ where: { id, userId }, data });
   revalidatePath("/app/subjects");
+  revalidatePath(`/app/subjects/${existing.subjectId}`);
   revalidatePath(`/app/subjects/${data.subjectId}`);
 }
 
 export async function deleteTopic(formData: FormData) {
   const userId = await requireUserId();
   const id = z.string().cuid().parse(String(formData.get("id") ?? ""));
+  const existing = await prisma.topic.findFirst({ where: { id, userId }, select: { subjectId: true } });
   await prisma.topic.deleteMany({ where: { id, userId } });
   revalidatePath("/app/subjects");
+  if (existing) revalidatePath(`/app/subjects/${existing.subjectId}`);
 }
 
 export async function createTimetableEntry(formData: FormData) {
@@ -297,9 +303,12 @@ export async function completeTask(formData: FormData) {
 
 export async function deleteTask(formData: FormData) {
   const userId = await requireUserId();
-  await prisma.task.deleteMany({ where: { id: String(formData.get("id") ?? ""), userId } });
+  const id = String(formData.get("id") ?? "");
+  const existing = await prisma.task.findFirst({ where: { id, userId }, select: { subjectId: true } });
+  await prisma.task.deleteMany({ where: { id, userId } });
   revalidatePath("/app");
   revalidatePath("/app/tasks");
+  if (existing?.subjectId) revalidatePath(`/app/subjects/${existing.subjectId}`);
 }
 
 export async function createBoss(formData: FormData) {
@@ -323,9 +332,12 @@ export async function updateBoss(formData: FormData) {
 
 export async function deleteBoss(formData: FormData) {
   const userId = await requireUserId();
-  await prisma.boss.deleteMany({ where: { id: String(formData.get("id") ?? ""), userId } });
+  const id = String(formData.get("id") ?? "");
+  const existing = await prisma.boss.findFirst({ where: { id, userId }, select: { subjectId: true } });
+  await prisma.boss.deleteMany({ where: { id, userId } });
   revalidatePath("/app");
   revalidatePath("/app/bosses");
+  if (existing) revalidatePath(`/app/subjects/${existing.subjectId}`);
 }
 
 export async function createGrade(formData: FormData) {
@@ -334,22 +346,29 @@ export async function createGrade(formData: FormData) {
   await ensureOwnedSubject(userId, data.subjectId);
   await prisma.grade.create({ data: { ...data, userId } });
   revalidatePath("/app/grades");
+  revalidatePath(`/app/subjects/${data.subjectId}`);
 }
 
 export async function updateGrade(formData: FormData) {
   const userId = await requireUserId();
   const id = z.string().cuid().parse(String(formData.get("id") ?? ""));
+  const existing = await prisma.grade.findFirst({ where: { id, userId }, select: { subjectId: true } });
+  if (!existing) return;
   const data = gradeSchema.parse(formObject(formData));
   await ensureOwnedSubject(userId, data.subjectId);
   await prisma.grade.updateMany({ where: { id, userId }, data });
   revalidatePath("/app/grades");
+  revalidatePath(`/app/subjects/${existing.subjectId}`);
   revalidatePath(`/app/subjects/${data.subjectId}`);
 }
 
 export async function deleteGrade(formData: FormData) {
   const userId = await requireUserId();
-  await prisma.grade.deleteMany({ where: { id: String(formData.get("id") ?? ""), userId } });
+  const id = String(formData.get("id") ?? "");
+  const existing = await prisma.grade.findFirst({ where: { id, userId }, select: { subjectId: true } });
+  await prisma.grade.deleteMany({ where: { id, userId } });
   revalidatePath("/app/grades");
+  if (existing) revalidatePath(`/app/subjects/${existing.subjectId}`);
 }
 
 export async function createGoal(formData: FormData) {
@@ -358,15 +377,20 @@ export async function createGoal(formData: FormData) {
   const subjectId = await ensureOwnedSubject(userId, data.subjectId);
   await prisma.goal.create({ data: { ...data, subjectId, isComplete: data.progress === 100, userId } });
   revalidatePath("/app/goals");
+  if (subjectId) revalidatePath(`/app/subjects/${subjectId}`);
 }
 
 export async function updateGoalDetails(formData: FormData) {
   const userId = await requireUserId();
   const id = z.string().cuid().parse(String(formData.get("id") ?? ""));
+  const existing = await prisma.goal.findFirst({ where: { id, userId }, select: { subjectId: true } });
+  if (!existing) return;
   const data = goalSchema.parse(formObject(formData));
   const subjectId = await ensureOwnedSubject(userId, data.subjectId);
   await prisma.goal.updateMany({ where: { id, userId }, data: { ...data, subjectId, isComplete: data.progress === 100 } });
   revalidatePath("/app/goals");
+  if (existing.subjectId) revalidatePath(`/app/subjects/${existing.subjectId}`);
+  if (subjectId) revalidatePath(`/app/subjects/${subjectId}`);
 }
 
 export async function updateGoal(formData: FormData) {
@@ -378,8 +402,11 @@ export async function updateGoal(formData: FormData) {
 
 export async function deleteGoal(formData: FormData) {
   const userId = await requireUserId();
-  await prisma.goal.deleteMany({ where: { id: String(formData.get("id") ?? ""), userId } });
+  const id = String(formData.get("id") ?? "");
+  const existing = await prisma.goal.findFirst({ where: { id, userId }, select: { subjectId: true } });
+  await prisma.goal.deleteMany({ where: { id, userId } });
   revalidatePath("/app/goals");
+  if (existing?.subjectId) revalidatePath(`/app/subjects/${existing.subjectId}`);
 }
 
 export async function startStudySession(plannedMinutes: number): Promise<StudyStartResult> {
