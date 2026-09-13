@@ -1,11 +1,22 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { mergeChatList } from "@/components/ai/ai-workspace";
 import { ContextPicker } from "@/components/ai/context-picker";
 import { MessageList } from "@/components/ai/message-list";
 import { emptyContextSelection } from "@/lib/ai/validation";
 
 describe("interfaz de IA", () => {
+  it("mantiene un solo chat cuando llega otra respuesta del mismo chat", () => {
+    const existing = { id: "cm0000000000000000000000", title: "Primera pregunta", createdAt: "2026-09-13T00:00:00.000Z", updatedAt: "2026-09-13T00:00:00.000Z" };
+    const refreshed = { ...existing, title: "Primera pregunta actualizada", updatedAt: "2026-09-13T00:01:00.000Z" };
+
+    const result = mergeChatList([existing], refreshed);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual(refreshed);
+  });
+
   it("explica que el contexto autorizado se selecciona automaticamente", () => {
     const markup = renderToStaticMarkup(createElement(ContextPicker, {
       enabled: true,

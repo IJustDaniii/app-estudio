@@ -49,7 +49,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       if (previousMessage) return aiApiError("DUPLICATE_REQUEST", "Este mensaje ya se está procesando o ya fue enviado.", 409);
     }
     const [existingChat, settings] = await Promise.all([
-      chatId ? prisma.aIChat.findFirst({ where: { id: chatId, userId }, select: { id: true, title: true } }) : Promise.resolve(null),
+      chatId ? prisma.aIChat.findFirst({ where: { id: chatId, userId }, select: { id: true, title: true, createdAt: true, updatedAt: true } }) : Promise.resolve(null),
       getAISettings(userId),
     ]);
     if (!isNewChat && !existingChat) return aiApiError("NOT_FOUND", "Chat no encontrado", 404);

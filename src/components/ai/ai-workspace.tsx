@@ -23,6 +23,12 @@ function emptyContextOptions(): ContextOptions {
   return { subjects: [], topics: [], tasks: [], bosses: [], grades: [], goals: [], studySessions: [], materials: [] };
 }
 
+export function mergeChatList(chats: ChatSummary[], incoming: ChatSummary): ChatSummary[] {
+  const current = chats.find((chat) => chat.id === incoming.id);
+  const merged = current ? { ...current, ...incoming } : incoming;
+  return [merged, ...chats.filter((chat) => chat.id !== incoming.id)];
+}
+
 async function errorMessage(response: Response) {
   const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
   return body?.error?.message ?? "La operación no se pudo completar.";
@@ -189,7 +195,7 @@ export function AIWorkspace({ initialChats, initialChatPagination, initialActive
         for (const line of lines) {
           if (!line.trim()) continue;
           const event = JSON.parse(line) as StreamEvent;
-          if (event.type === "meta") { assistantId = event.assistantMessage.id; if (event.chat) { setChats((current) => [event.chat!, ...current]); setActiveId(event.chat.id); window.history.replaceState(null, "", `/app/ai?chat=${event.chat.id}`); } setMessages((current) => [...current, event.userMessage, event.assistantMessage]); }
+          if (event.type === "meta") { assistantId = event.assistantMessage.id; if (event.chat) { setChats((current) => mergeChatList(current, event.chat!)); setActiveId(event.chat.id); window.history.replaceState(null, "", `/app/ai?chat=${event.chat.id}`); } setMessages((current) => [...current, event.userMessage, event.assistantMessage]); }
           else if (event.type === "delta") setMessages((current) => current.map((message) => message.id === assistantId ? { ...message, content: message.content + event.content } : message));
           else if (event.type === "done") { setMessages((current) => current.map((message) => message.id === event.message.id ? event.message : message)); setAllowInternet(false); requestId.current = null; }
           else if (event.type === "proposal") setPendingProposal(event.proposal);
