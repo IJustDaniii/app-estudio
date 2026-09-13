@@ -70,4 +70,4 @@
 - [x] `npm run build`
 - [x] `npx prisma validate`
 - [x] `npm audit --audit-level=high`
-- [ ] Commit y push a `origin/main`
+- [x] Commit y push a `origin/main`
