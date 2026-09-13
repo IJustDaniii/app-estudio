@@ -43,6 +43,16 @@ describe("selección adaptativa de contexto académico", () => {
   });
 
   it.each([
+    ["¿Cuál es mi progreso?", ["grades", "sessionsAndStatistics"]],
+    ["¿Cómo voy?", ["grades", "sessionsAndStatistics"]],
+    ["Ayúdame a organizarme esta semana", ["tasksAndBosses", "schedule", "sessionsAndStatistics"]],
+    ["¿Qué puedo hacer próximamente?", ["tasksAndBosses", "schedule", "sessionsAndStatistics"]],
+  ] as const)("detecta frases personales naturales: %s", (message, categories) => {
+    const plan = selectAcademicContextPlan({ message, permissions: allPermissions });
+    expect(plan.categories).toEqual(expect.arrayContaining([...categories]));
+  });
+
+  it.each([
     ["¿Qué tareas pendientes tengo?", ["tasksAndBosses"]],
     ["¿Qué exámenes tengo próximamente?", ["tasksAndBosses"]],
     ["¿Qué objetivos y metas tengo?", ["tasksAndBosses"]],
@@ -90,13 +100,42 @@ describe("selección adaptativa de contexto académico", () => {
     expect(result.warnings).toContain("Notas: datos no disponibles temporalmente.");
   });
 
-  it("consulta automáticamente todas las categorías autorizadas sin selección manual", async () => {
+  it("consulta solo las categorías necesarias para una pregunta concreta", async () => {
     const repo = repository();
     await buildAcademicContext({ userId: "user-a", isEnabled: true, message: "¿Qué estudio hoy?", maxCharacters: 8_000, selection: emptyContextSelection, permissions: allPermissions, repository: repo, loadMaterial: async () => Buffer.alloc(0) });
-    expect(repo.subjects).toHaveBeenCalled();
+    expect(repo.tasks).toHaveBeenCalled();
+    expect(repo.schedule).toHaveBeenCalled();
+    expect(repo.subjects).not.toHaveBeenCalled();
+    expect(repo.grades).not.toHaveBeenCalled();
+    expect(repo.materials).not.toHaveBeenCalled();
+    expect(repo.gamification).not.toHaveBeenCalled();
+  });
+
+  it("resume todas las categorías autorizadas para una pregunta amplia", async () => {
+    const repo = repository();
+    await buildAcademicContext({ userId: "user-a", isEnabled: true, message: "¿Qué sabes de mí?", maxCharacters: 8_000, selection: emptyContextSelection, permissions: allPermissions, repository: repo, loadMaterial: async () => Buffer.alloc(0) });
+    expect(repo.subjects).toHaveBeenCalledTimes(1);
+    expect(repo.tasks).toHaveBeenCalled();
     expect(repo.grades).toHaveBeenCalled();
     expect(repo.materials).toHaveBeenCalled();
     expect(repo.gamification).toHaveBeenCalled();
+  });
+
+  it("usa un fallback personal seguro para preguntas ambiguas", async () => {
+    const repo = repository();
+    const plan = selectAcademicContextPlan({ message: "¿Qué puedo mejorar de lo mío?", permissions: allPermissions });
+    const result = await buildAcademicContext({ userId: "user-a", isEnabled: true, message: "¿Qué puedo mejorar de lo mío?", maxCharacters: 8_000, selection: emptyContextSelection, permissions: allPermissions, repository: repo, loadMaterial: async () => Buffer.alloc(0) });
+
+    expect(plan.intent).toBe("personal");
+    expect(plan.categories).toEqual(expect.arrayContaining(["tasksAndBosses", "grades", "sessionsAndStatistics"]));
+    expect(result.snapshot.mode).toBe("personal");
+    expect(result.text).toContain("Ejercicios");
+  });
+
+  it("no duplica la consulta de asignaturas al resolver una duda personal", async () => {
+    const repo = repository();
+    await buildAcademicContext({ userId: "user-a", isEnabled: true, message: "Tengo una duda de Matemáticas sobre derivadas", maxCharacters: 8_000, selection: emptyContextSelection, permissions: allPermissions, repository: repo, loadMaterial: async () => Buffer.alloc(0) });
+    expect(repo.subjects).toHaveBeenCalledTimes(1);
   });
 
   it("habilita solo las herramientas de la necesidad detectada", () => {
@@ -133,7 +172,7 @@ describe("selección adaptativa de contexto académico", () => {
 
     expect(result.text).toContain("Ejercicios");
     expect(result.text).toContain("Sesiones y estadísticas");
-    expect(repo.materials).toHaveBeenCalled();
+    expect(repo.materials).not.toHaveBeenCalled();
     expect(repo.tasks).toHaveBeenCalledWith("user-a", [], expect.objectContaining({ limit: 3 }));
     expect(result.snapshot.used.map((item) => item.category)).toEqual(expect.arrayContaining([
       "tasksAndBosses", "schedule", "sessionsAndStatistics",
@@ -167,6 +206,20 @@ describe("selección adaptativa de contexto académico", () => {
     }));
   });
 
+  it("aplica from/to a las notas y el día local al horario diario", async () => {
+    const repo = repository();
+    const now = new Date("2026-09-13T01:00:00.000Z");
+    await buildAcademicContext({
+      userId: "user-a", isEnabled: true, message: "¿Cómo van mis notas esta semana y cuál es mi horario de hoy?", maxCharacters: 8_000,
+      selection: emptyContextSelection, permissions: allPermissions, timeZone: "Europe/Madrid", now, repository: repo, loadMaterial: async () => Buffer.alloc(0),
+    });
+    expect(repo.grades).toHaveBeenCalledWith("user-a", [], expect.objectContaining({
+      from: new Date("2026-09-06T22:00:00.000Z"),
+      to: new Date("2026-09-13T22:00:00.000Z"),
+    }));
+    expect(repo.schedule).toHaveBeenCalledWith("user-a", expect.objectContaining({ dayOfWeek: 7 }));
+  });
+
   it("serializa todos los campos de tareas y Bosses y respeta selecciones manuales", async () => {
     const repo = repository();
     const result = await buildAcademicContext({
@@ -198,8 +251,8 @@ describe("selección adaptativa de contexto académico", () => {
     const loadMaterial = vi.fn(async () => Buffer.from("Contenido privado"));
     await buildAcademicContext({ userId: "user-a", isEnabled: true, message: "¿Qué materiales tengo?", maxCharacters: 4_000, selection: emptyContextSelection, permissions: allPermissions, repository: repo, loadMaterial });
     expect(loadMaterial).not.toHaveBeenCalled();
-    expect(repo.tasks).toHaveBeenCalled();
-    expect(repo.bosses).toHaveBeenCalled();
+    expect(repo.tasks).not.toHaveBeenCalled();
+    expect(repo.bosses).not.toHaveBeenCalled();
     expect(repo.materials).toHaveBeenCalled();
 
     await buildAcademicContext({ userId: "user-a", isEnabled: true, message: "Analiza mis apuntes", maxCharacters: 4_000, selection: emptyContextSelection, permissions: allPermissions, repository: repo, loadMaterial });
@@ -215,6 +268,21 @@ describe("selección adaptativa de contexto académico", () => {
 
     expect(loadMaterial).not.toHaveBeenCalled();
     expect(result.warnings).toContain("Libro grande: AI_MATERIAL_TOO_LARGE");
+  });
+
+  it("limita el análisis total y mantiene recuperables varios materiales lentos", async () => {
+    const repo = repository();
+    repo.materials = vi.fn(async () => [1, 2, 3, 4].map((id) => ({ id: `material-${id}`, name: `Apuntes ${id}`, mimeType: "text/plain", size: 10, description: null, type: "NOTES", processingStatus: "PROCESSED", subjectName: null, topicName: null, storageKey: `material-${id}` })));
+    const loadMaterial = vi.fn((_key: string, signal?: AbortSignal) => new Promise<Buffer>((resolve, reject) => {
+      const timer = setTimeout(() => resolve(Buffer.from("contenido")), 500);
+      signal?.addEventListener("abort", () => { clearTimeout(timer); reject(new Error("cancelado")); }, { once: true });
+    }));
+    const started = Date.now();
+    const result = await buildAcademicContext({ userId: "user-a", isEnabled: true, message: "Analiza mis materiales", maxCharacters: 8_000, selection: emptyContextSelection, permissions: allPermissions, repository: repo, loadMaterial, materialProcessingTimeoutMs: 250, materialProcessingTotalTimeoutMs: 100 });
+
+    expect(Date.now() - started).toBeLessThan(350);
+    expect(loadMaterial).toHaveBeenCalledTimes(2);
+    expect(result.warnings.filter((warning) => warning.includes("AI_MATERIAL_TIMEOUT"))).toHaveLength(4);
   });
 
   it("permite el chat sin contexto personal aunque la pregunta pida datos académicos", async () => {

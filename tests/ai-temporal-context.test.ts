@@ -20,4 +20,15 @@ describe("rango temporal académico común", () => {
     expect(range.start).toEqual(now);
     expect(range.end.getTime()).toBeGreaterThan(now.getTime());
   });
+
+  it("reconoce próximamente, recientes y notas mensuales", () => {
+    expect(resolveAcademicTimeRange("¿Qué puedo hacer próximamente?", now, "Europe/Madrid").kind).toBe("upcoming");
+    expect(resolveAcademicTimeRange("Enséñame mis datos recientes", now, "Europe/Madrid").kind).toBe("recent");
+    expect(resolveAcademicTimeRange("¿Cómo van mis notas mensuales?", now, "Europe/Madrid").kind).toBe("month");
+  });
+
+  it("no marca como temporal una búsqueda textual normal", () => {
+    const range = resolveAcademicTimeRange("matemáticas", now, "Europe/Madrid");
+    expect(range.explicit).toBe(false);
+  });
 });

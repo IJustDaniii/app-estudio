@@ -4,6 +4,7 @@ const taskFindMany = vi.hoisted(() => vi.fn());
 const bossFindMany = vi.hoisted(() => vi.fn());
 const gradeFindMany = vi.hoisted(() => vi.fn());
 const subjectFindMany = vi.hoisted(() => vi.fn());
+const timetableFindMany = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -11,6 +12,7 @@ vi.mock("@/lib/prisma", () => ({
     boss: { findMany: bossFindMany },
     grade: { findMany: gradeFindMany },
     subject: { findMany: subjectFindMany },
+    timetableEntry: { findMany: timetableFindMany },
   },
 }));
 
@@ -18,7 +20,10 @@ const { scopedReadOnlyToolRepository } = await import("@/lib/ai/repository");
 const { emptyContextSelection } = await import("@/lib/ai/validation");
 
 describe("repositorio de contexto académico", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    timetableFindMany.mockResolvedValue([]);
+  });
 
   it("mantiene el userId en cada consulta de herramienta", async () => {
     taskFindMany.mockResolvedValue([]);
@@ -38,6 +43,50 @@ describe("repositorio de contexto académico", () => {
 
     expect(taskFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ dueDate: expect.objectContaining({ gte: now }) }) }));
     expect(bossFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ date: expect.objectContaining({ gte: now }) }) }));
+  });
+
+  it("separa la búsqueda textual del rango temporal", async () => {
+    taskFindMany.mockResolvedValue([]);
+    const now = new Date("2026-09-13T10:00:00.000Z");
+    const repository = scopedReadOnlyToolRepository(emptyContextSelection, undefined, 20, [], "Europe/Madrid", now);
+
+    await repository.tasks("user-a", { query: "matemáticas", limit: 5 });
+    expect(taskFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.not.objectContaining({ dueDate: expect.anything() }) }));
+
+    await repository.tasks("user-a", { query: "matemáticas", timeRange: "week", limit: 5 });
+    expect(taskFindMany).toHaveBeenLastCalledWith(expect.objectContaining({ where: expect.objectContaining({ dueDate: expect.objectContaining({ gte: expect.any(Date), lt: expect.any(Date) }) }) }));
+  });
+
+  it("aplica el rango mensual a las notas", async () => {
+    gradeFindMany.mockResolvedValue([]);
+    const now = new Date("2026-09-13T10:00:00.000Z");
+    const repository = scopedReadOnlyToolRepository(emptyContextSelection, undefined, 20, [], "Europe/Madrid", now);
+
+    await repository.grades("user-a", { query: "notas", timeRange: "month", limit: 5 });
+
+    expect(gradeFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ date: { gte: new Date("2026-08-31T22:00:00.000Z"), lt: new Date("2026-09-30T22:00:00.000Z") } }) }));
+  });
+
+  it("mantiene completo el rango diario o reciente solicitado por la herramienta", async () => {
+    taskFindMany.mockResolvedValue([]);
+    const now = new Date("2026-09-13T10:00:00.000Z");
+    const repository = scopedReadOnlyToolRepository(emptyContextSelection, undefined, 20, [], "Europe/Madrid", now);
+
+    await repository.tasks("user-a", { query: "tareas", timeRange: "today", limit: 5 });
+    expect(taskFindMany).toHaveBeenLastCalledWith(expect.objectContaining({ where: expect.objectContaining({ dueDate: { gte: new Date("2026-09-12T22:00:00.000Z"), lt: new Date("2026-09-13T22:00:00.000Z") } }) }));
+
+    await repository.tasks("user-a", { query: "tareas", timeRange: "recent", limit: 5 });
+    expect(taskFindMany).toHaveBeenLastCalledWith(expect.objectContaining({ where: expect.objectContaining({ dueDate: { gte: new Date("2026-08-29T22:00:00.000Z"), lt: now } }) }));
+  });
+
+  it("filtra el horario diario sin convertir una vista semanal en un solo día", async () => {
+    const now = new Date("2026-09-13T10:00:00.000Z");
+    const repository = scopedReadOnlyToolRepository(emptyContextSelection, undefined, 20, [], "Europe/Madrid", now);
+
+    await repository.schedule?.("user-a", { query: "horario de hoy", limit: 5 });
+    expect(timetableFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ userId: "user-a", dayOfWeek: 7 }) }));
+    await repository.schedule?.("user-a", { query: "horario de esta semana", limit: 5 });
+    expect(timetableFindMany).toHaveBeenLastCalledWith(expect.objectContaining({ where: expect.not.objectContaining({ dayOfWeek: expect.anything() }) }));
   });
 
   it("serializa la misma forma completa que el contexto adaptativo", async () => {

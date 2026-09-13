@@ -2,9 +2,13 @@ import { z } from "zod";
 import type { AIContextCategory, AIToolDefinition } from "@/lib/ai/types";
 import { defaultAIAcademicPermissions, type AIAcademicPermissions, type ContextSelection } from "@/lib/ai/validation";
 
+const timeRangeSchema = z.enum(["today", "tomorrow", "week", "month", "upcoming", "recent"]).optional();
 const querySchema = z.object({
   query: z.string().trim().max(120).optional(),
   subjectId: z.string().cuid().optional(),
+  timeRange: timeRangeSchema,
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
   limit: z.number().int().min(1).max(20).default(10),
 });
 
@@ -23,19 +27,29 @@ const toolCategory: Record<string, AIContextCategory> = {
   consult_gamification: "gamification",
 };
 
+const timeRangeProperty = { type: "string", enum: ["today", "tomorrow", "week", "month", "upcoming", "recent"] };
+const temporalProperties = {
+  query: { type: "string" },
+  subjectId: { type: "string" },
+  timeRange: timeRangeProperty,
+  from: { type: "string", format: "date-time" },
+  to: { type: "string", format: "date-time" },
+  limit: { type: "integer", minimum: 1, maximum: 20 },
+};
+
 export const AI_TOOL_DEFINITIONS: AIToolDefinition[] = [
-  { name: "consult_subjects", description: "Consulta asignaturas del usuario por nombre.", access: "read", parameters: { type: "object", properties: { query: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 20 } } } },
-  { name: "consult_topics", description: "Consulta temas del usuario, opcionalmente dentro de una asignatura.", access: "read", parameters: { type: "object", properties: { query: { type: "string" }, subjectId: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 20 } } } },
-  { name: "consult_tasks", description: "Consulta tareas del usuario relevantes para la pregunta.", access: "read", parameters: { type: "object", properties: { query: { type: "string" }, subjectId: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 20 } } } },
-  { name: "consult_bosses", description: "Consulta Bosses o exámenes del usuario relevantes para la pregunta.", access: "read", parameters: { type: "object", properties: { query: { type: "string" }, subjectId: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 20 } } } },
-  { name: "consult_goals", description: "Consulta objetivos académicos del usuario.", access: "read", parameters: { type: "object", properties: { query: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 20 } } } },
-  { name: "consult_grades", description: "Consulta notas del usuario relevantes para la pregunta.", access: "read", parameters: { type: "object", properties: { query: { type: "string" }, subjectId: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 20 } } } },
-  { name: "consult_study_sessions", description: "Consulta sesiones de estudio del rango temporal solicitado.", access: "read", parameters: { type: "object", properties: { query: { type: "string" }, subjectId: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 20 } } } },
-  { name: "consult_statistics", description: "Consulta estadísticas del rango temporal solicitado.", access: "read", parameters: { type: "object", properties: { query: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 20 } } } },
-  { name: "consult_schedule", description: "Consulta el horario semanal completo del usuario.", access: "read", parameters: { type: "object", properties: { query: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 20 } } } },
-  { name: "consult_calendar", description: "Consulta los próximos eventos del calendario del usuario.", access: "read", parameters: { type: "object", properties: { query: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 20 } } } },
-  { name: "consult_materials", description: "Consulta materiales privados del usuario por nombre o asignatura.", access: "read", parameters: { type: "object", properties: { query: { type: "string" }, subjectId: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 20 } } } },
-  { name: "consult_gamification", description: "Consulta XP, nivel, monedas, misiones y racha del usuario.", access: "read", parameters: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 20 } } } },
+  { name: "consult_subjects", description: "Consulta asignaturas por texto.", access: "read", parameters: { type: "object", properties: { query: temporalProperties.query, limit: temporalProperties.limit } } },
+  { name: "consult_topics", description: "Consulta temas por texto y asignatura.", access: "read", parameters: { type: "object", properties: { query: temporalProperties.query, subjectId: temporalProperties.subjectId, limit: temporalProperties.limit } } },
+  { name: "consult_tasks", description: "Consulta tareas. query es texto y timeRange es el filtro temporal independiente.", access: "read", parameters: { type: "object", properties: temporalProperties } },
+  { name: "consult_bosses", description: "Consulta Bosses o exámenes. query es texto y timeRange es el filtro temporal independiente.", access: "read", parameters: { type: "object", properties: temporalProperties } },
+  { name: "consult_goals", description: "Consulta objetivos académicos.", access: "read", parameters: { type: "object", properties: { query: temporalProperties.query, timeRange: temporalProperties.timeRange, limit: temporalProperties.limit } } },
+  { name: "consult_grades", description: "Consulta notas; timeRange se aplica a from/to.", access: "read", parameters: { type: "object", properties: temporalProperties } },
+  { name: "consult_study_sessions", description: "Consulta sesiones usando el rango temporal indicado.", access: "read", parameters: { type: "object", properties: temporalProperties } },
+  { name: "consult_statistics", description: "Consulta estadísticas usando el rango temporal indicado.", access: "read", parameters: { type: "object", properties: { query: temporalProperties.query, timeRange: temporalProperties.timeRange, limit: temporalProperties.limit } } },
+  { name: "consult_schedule", description: "Consulta el día del horario si timeRange es today/tomorrow; week devuelve la semana completa.", access: "read", parameters: { type: "object", properties: { query: temporalProperties.query, timeRange: temporalProperties.timeRange, limit: temporalProperties.limit } } },
+  { name: "consult_calendar", description: "Consulta calendario usando query como texto y timeRange como fechas.", access: "read", parameters: { type: "object", properties: { query: temporalProperties.query, timeRange: temporalProperties.timeRange, limit: temporalProperties.limit } } },
+  { name: "consult_materials", description: "Consulta materiales por texto o asignatura.", access: "read", parameters: { type: "object", properties: { query: temporalProperties.query, subjectId: temporalProperties.subjectId, limit: temporalProperties.limit } } },
+  { name: "consult_gamification", description: "Consulta XP, nivel, monedas, misiones y racha.", access: "read", parameters: { type: "object", properties: { limit: temporalProperties.limit } } },
 ];
 
 export function toolDefinitionsForPermissions(permissions: AIAcademicPermissions = defaultAIAcademicPermissions, categories?: AIContextCategory[], toolNames?: string[]) {

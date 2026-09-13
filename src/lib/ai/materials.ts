@@ -3,11 +3,33 @@ import { PDFParse } from "pdf-parse";
 
 export const MAX_AI_MATERIAL_BYTES = 10 * 1024 * 1024;
 export const MAX_AI_MATERIAL_PROCESSING_MS = 8_000;
+export const MAX_AI_MATERIAL_TOTAL_PROCESSING_MS = 20_000;
+export const MAX_AI_MATERIAL_CONCURRENCY = 2;
 const MAX_OFFICE_XML_BYTES = 5 * 1024 * 1024;
 const MAX_OFFICE_XML_FILES = 200;
 const MAX_PDF_PAGES = 50;
 
 type SizedZipObject = JSZipObject & { _data?: { compressedSize?: number; uncompressedSize?: number } };
+
+function throwIfAborted(signal?: AbortSignal) {
+  if (signal?.aborted) {
+    const reason = signal.reason;
+    throw reason instanceof Error && reason.name !== "AbortError" ? reason : new Error("AI_MATERIAL_CANCELLED");
+  }
+}
+
+function abortable<T>(operation: Promise<T>, signal: AbortSignal | undefined) {
+  if (!signal) return operation;
+  throwIfAborted(signal);
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      const reason = signal.reason;
+      reject(reason instanceof Error && reason.name !== "AbortError" ? reason : new Error("AI_MATERIAL_CANCELLED"));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    operation.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+  });
+}
 
 function normalizeText(text: string, maxCharacters: number) {
   return text
@@ -56,11 +78,13 @@ function validateOfficeEntries(entries: JSZipObject[]) {
   }
 }
 
-async function extractOfficeText(mimeType: string, content: Buffer, maxCharacters: number) {
+async function extractOfficeText(mimeType: string, content: Buffer, maxCharacters: number, signal?: AbortSignal) {
+  throwIfAborted(signal);
   let zip: JSZip;
   try {
-    zip = await JSZip.loadAsync(content, { checkCRC32: true, createFolders: false });
+    zip = await abortable(JSZip.loadAsync(content, { checkCRC32: true, createFolders: false }), signal);
   } catch {
+    throwIfAborted(signal);
     throw new Error("AI_MATERIAL_INVALID");
   }
   const entries = officeEntryNames(zip, mimeType);
@@ -68,15 +92,16 @@ async function extractOfficeText(mimeType: string, content: Buffer, maxCharacter
   const parts: string[] = [];
   let remaining = maxCharacters;
   for (const entry of entries) {
+    throwIfAborted(signal);
     if (remaining <= 0) break;
-    const part = textFromOfficeXml(await entry.async("string")).slice(0, remaining);
+    const part = textFromOfficeXml(await abortable(entry.async("string", () => throwIfAborted(signal)), signal)).slice(0, remaining);
     parts.push(part);
     remaining -= part.length;
   }
   return normalizeText(parts.join("\n"), maxCharacters);
 }
 
-async function extractPdfText(content: Buffer, maxCharacters: number) {
+async function extractPdfText(content: Buffer, maxCharacters: number, signal?: AbortSignal) {
   const parser = new PDFParse({
     data: new Uint8Array(content),
     stopAtErrors: true,
@@ -84,22 +109,32 @@ async function extractPdfText(content: Buffer, maxCharacters: number) {
     disableFontFace: true,
     maxImageSize: 1_000_000,
   });
+  let destroyed = false;
+  const destroy = async () => {
+    if (destroyed) return;
+    destroyed = true;
+    await parser.destroy().catch(() => undefined);
+  };
   try {
-    const result = await parser.getText({ first: MAX_PDF_PAGES, parseHyperlinks: false, includeMarkedContent: false });
+    throwIfAborted(signal);
+    if (signal) signal.addEventListener("abort", () => { void destroy(); }, { once: true });
+    const result = await abortable(parser.getText({ first: MAX_PDF_PAGES, parseHyperlinks: false, includeMarkedContent: false }), signal);
     return normalizeText(result.text, maxCharacters);
   } catch {
+    throwIfAborted(signal);
     throw new Error("AI_MATERIAL_INVALID");
   } finally {
-    await parser.destroy();
+    await destroy();
   }
 }
 
-export async function extractMaterialText(mimeType: string, content: Buffer, maxCharacters: number) {
+export async function extractMaterialText(mimeType: string, content: Buffer, maxCharacters: number, signal?: AbortSignal) {
+  throwIfAborted(signal);
   if (content.length > MAX_AI_MATERIAL_BYTES) throw new Error("AI_MATERIAL_TOO_LARGE");
   if (!Number.isSafeInteger(maxCharacters) || maxCharacters < 1) return "";
-  if (mimeType === "application/pdf") return extractPdfText(content, maxCharacters);
+  if (mimeType === "application/pdf") return extractPdfText(content, maxCharacters, signal);
   if (mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || mimeType === "application/vnd.openxmlformats-officedocument.presentationml.presentation") {
-    return extractOfficeText(mimeType, content, maxCharacters);
+    return extractOfficeText(mimeType, content, maxCharacters, signal);
   }
   throw new Error("AI_MATERIAL_UNSUPPORTED");
 }

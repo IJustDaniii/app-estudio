@@ -71,3 +71,13 @@
 - [x] `npx prisma validate`
 - [x] `npm audit --audit-level=high`
 - [x] Commit y push a `origin/main`
+
+## Corrección de integración IA
+
+- [x] Separar búsqueda textual y rango temporal; corregir hoy, mañana, semana, mes, próximos y recientes.
+- [x] Corregir detector de intención y fallback personal.
+- [x] Evitar consultas duplicadas y carga innecesaria sin romper permisos ni estados de contexto.
+- [x] Ampliar ayuda interna verificable y declarar límites de lectura/web.
+- [x] Robustecer parser de materiales con cancelación, presupuesto global, concurrencia y fallos recuperables.
+- [x] Mantener chat nuevo perezoso, añadir idempotencia y conservar el resumen sin desplegable de contexto.
+- [x] Ejecutar pruebas, lint, typecheck, build, Prisma y Ollama; comittear en `main` y publicar.

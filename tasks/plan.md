@@ -44,3 +44,36 @@ Embeddings, búsqueda semántica, RAG, flashcards, repetición espaciada, tests 
 - Las consultas se ejecutan en `AcademicContextRepository`, que aplica siempre `userId`, permisos, límites de filas y selección de campos. Las herramientas reciben el mismo alcance y nunca Prisma.
 - Las categorías de configuración son notas; planificación (tareas, Bosses y objetivos); sesiones/estadísticas; horario/calendario; materiales; y gamificación (XP, nivel, monedas, misiones y racha). Asignaturas y temas forman la base académica no sensible.
 - Cada respuesta guarda un resumen serializable del modo, intención, categorías usadas, elementos incluidos/omitidos y avisos. La UI lo muestra de forma compacta.
+
+## Corrección de integración IA: búsquedas, intención y robustez
+
+Esta ampliación corrige regresiones detectadas sobre la infraestructura anterior sin cambiar el contrato de lectura ni permitir escrituras automáticas.
+
+### Fase 1: rango temporal y herramientas
+
+- [x] Separar texto de búsqueda y rango temporal en contexto y herramientas.
+- [x] Aplicar rangos explícitos a tareas, sesiones, calendario y notas; mantener búsquedas textuales sin rango implícito.
+- [x] Filtrar el horario por día solo para consultas diarias y conservar la semana completa cuando se solicite.
+
+### Fase 2: intención y contexto autorizado
+
+- [x] Reconocer progreso, organización semanal y próximamente en español natural.
+- [x] Añadir fallback seguro para preguntas personales ambiguas y resumen completo para preguntas amplias.
+- [x] Evitar consultas duplicadas y categorías no relevantes, preservando aislamiento, permisos, límites, avisos y estados vacíos.
+
+### Fase 3: ayuda interna verificable
+
+- [x] Actualizar la ayuda que recibe el proveedor con pantallas, funciones, ajustes, límites y flujos presentes en la aplicación.
+- [x] Declarar de forma explícita que la IA solo lee y no tiene acceso web.
+
+### Fase 4: materiales y creación perezosa de chats
+
+- [x] Añadir presupuesto global, concurrencia limitada y errores aislados por material.
+- [x] Propagar cancelación a los parsers PDF/Office y al almacenamiento.
+- [x] Mantener “Nuevo chat” perezoso y hacer idempotentes los envíos simultáneos.
+
+### Checkpoint de corrección
+
+- [x] Pruebas de regresión para búsquedas, fechas, intención, permisos, materiales y chats.
+- [x] `npm test`, `npm run lint`, `npm run typecheck`, `npm run build` y `npx prisma validate`.
+- [x] Comprobación real contra Ollama documentada con resultado verificable: `POST http://127.0.0.1:11434/api/chat` con `qwen3.5:9b` y `think=false` devolvió `OLLAMA_DONE=True` y `OK-AULA1B`.

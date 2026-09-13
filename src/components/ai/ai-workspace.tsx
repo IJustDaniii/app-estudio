@@ -197,7 +197,7 @@ export function AIWorkspace({ initialChats, initialChatPagination, initialActive
     try {
       const chatId = activeId ?? "new";
       const context = settings.isAcademicContextEnabled && usePersonalContext ? effectiveContextSelection(true, selection, settings, settings.maxItemsPerCategory) : emptyContextSelection;
-      const response = await fetch(`/api/ai/chats/${chatId}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content, context, usePersonalContext }) });
+      const response = await fetch(`/api/ai/chats/${chatId}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content, requestId: crypto.randomUUID(), context, usePersonalContext }) });
       if (!response.ok || !response.body) throw new Error(await errorMessage(response));
       const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = "";
       while (true) {

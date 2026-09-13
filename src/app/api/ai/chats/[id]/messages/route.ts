@@ -27,6 +27,10 @@ function streamLine(value: unknown) {
   return `${JSON.stringify(value)}\n`;
 }
 
+function isUniqueViolation(error: unknown) {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "P2002";
+}
+
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const userId = await apiUserId();
   if (!userId) return aiApiError("UNAUTHORIZED", "No autorizado", 401);
@@ -39,6 +43,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
   try {
     const data = await parseAIJson(request, sendMessageSchema);
+    if (data.requestId) {
+      const previousMessage = await prisma.aIMessage.findFirst({ where: { userId, requestId: data.requestId }, select: { id: true } });
+      if (previousMessage) return aiApiError("DUPLICATE_REQUEST", "Este mensaje ya se está procesando o ya fue enviado.", 409);
+    }
     const [existingChat, settings] = await Promise.all([
       chatId ? prisma.aIChat.findFirst({ where: { id: chatId, userId }, select: { id: true, title: true } }) : Promise.resolve(null),
       getAISettings(userId),
@@ -86,7 +94,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     if (isNewChat) {
       const created = await prisma.$transaction(async (transaction) => {
         const newChat = await transaction.aIChat.create({ data: { userId, title: defaultChatTitle(data.content) }, select: { id: true, title: true, createdAt: true, updatedAt: true } });
-        const userMessage = await transaction.aIMessage.create({ data: { chatId: newChat.id, userId, role: "USER", content: data.content, status: "COMPLETE", contextSnapshot: snapshot }, select: { id: true, role: true, content: true, status: true, createdAt: true } });
+        const userMessage = await transaction.aIMessage.create({ data: { chatId: newChat.id, userId, role: "USER", content: data.content, status: "COMPLETE", requestId: data.requestId, contextSnapshot: snapshot }, select: { id: true, role: true, content: true, status: true, createdAt: true } });
         const assistantMessage = await transaction.aIMessage.create({ data: { chatId: newChat.id, userId, role: "ASSISTANT", content: "", status: "PENDING", model: settings.model, contextSnapshot: snapshot }, select: { id: true, role: true, content: true, status: true, model: true, errorCode: true, contextSnapshot: true, createdAt: true } });
         return { chat: newChat, userMessage, assistantMessage };
       });
@@ -96,7 +104,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     } else {
       const shouldRename = existingChat!.title === "Nuevo chat" && historyDesc.length === 0;
       const [createdUserMessage, createdAssistantMessage] = await prisma.$transaction([
-        prisma.aIMessage.create({ data: { chatId: chatId!, userId, role: "USER", content: data.content, status: "COMPLETE", contextSnapshot: snapshot }, select: { id: true, role: true, content: true, status: true, createdAt: true } }),
+        prisma.aIMessage.create({ data: { chatId: chatId!, userId, role: "USER", content: data.content, status: "COMPLETE", requestId: data.requestId, contextSnapshot: snapshot }, select: { id: true, role: true, content: true, status: true, createdAt: true } }),
         prisma.aIMessage.create({ data: { chatId: chatId!, userId, role: "ASSISTANT", content: "", status: "PENDING", model: settings.model, contextSnapshot: snapshot }, select: { id: true, role: true, content: true, status: true, model: true, errorCode: true, contextSnapshot: true, createdAt: true } }),
         prisma.aIChat.update({ where: { id: chatId! }, data: { ...(shouldRename ? { title: defaultChatTitle(data.content) } : {}), updatedAt: new Date() } }),
       ]);
@@ -178,6 +186,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
     return new Response(body, { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", "X-Accel-Buffering": "no" } });
   } catch (error) {
+    if (isUniqueViolation(error)) return aiApiError("DUPLICATE_REQUEST", "Este mensaje ya se está procesando o ya fue enviado.", 409);
     if (error instanceof ZodError || error instanceof SyntaxError || (error instanceof Error && error.message === "AI_BODY_TOO_LARGE")) return aiApiError("VALIDATION_ERROR", "El mensaje o el contexto no son válidos", 422);
     return aiApiError("INTERNAL_ERROR", "No se pudo preparar el mensaje", 500);
   }

@@ -42,4 +42,11 @@ describe("extractMaterialText", () => {
     await expect(extractMaterialText("application/pdf", Buffer.alloc(MAX_AI_MATERIAL_BYTES + 1), 2_000)).rejects.toThrow("AI_MATERIAL_TOO_LARGE");
     await expect(extractMaterialText("application/msword", Buffer.from("legacy"), 2_000)).rejects.toThrow("AI_MATERIAL_UNSUPPORTED");
   });
+
+  it("cancela antes de iniciar PDF y Office cuando la solicitud ya fue abortada", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    await expect(extractMaterialText("application/pdf", Buffer.alloc(0), 2_000, controller.signal)).rejects.toThrow("AI_MATERIAL_CANCELLED");
+    await expect(extractMaterialText("application/vnd.openxmlformats-officedocument.wordprocessingml.document", Buffer.alloc(0), 2_000, controller.signal)).rejects.toThrow("AI_MATERIAL_CANCELLED");
+  });
 });

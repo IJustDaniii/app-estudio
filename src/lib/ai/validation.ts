@@ -92,6 +92,7 @@ export const renameChatSchema = z.object({ title: z.string().trim().min(1).max(A
 export const chatIdSchema = z.string().cuid();
 export const sendMessageSchema = z.object({
   content: z.string().trim().min(1).max(AI_MESSAGE_MAX_LENGTH),
+  requestId: z.string().uuid().optional(),
   context: contextSelectionSchema.default(emptyContextSelection),
   usePersonalContext: z.boolean().default(true),
 });

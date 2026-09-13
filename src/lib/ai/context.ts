@@ -1,6 +1,6 @@
 import type { AIContextCategory, AIContextCategorySummary, AIContextIntent, AIContextSnapshot, AIContextSnapshotItem } from "@/lib/ai/types";
-import { extractMaterialText, MAX_AI_MATERIAL_BYTES, MAX_AI_MATERIAL_PROCESSING_MS } from "@/lib/ai/materials";
-import { formatDateForTimeZone, zonedDayRange, zonedDayStart, normalizeTimeZone } from "@/lib/domain/dates";
+import { extractMaterialText, MAX_AI_MATERIAL_BYTES, MAX_AI_MATERIAL_CONCURRENCY, MAX_AI_MATERIAL_PROCESSING_MS, MAX_AI_MATERIAL_TOTAL_PROCESSING_MS } from "@/lib/ai/materials";
+import { formatDateForTimeZone, zonedDayOfWeek, zonedDayRange, zonedDayStart, normalizeTimeZone } from "@/lib/domain/dates";
 import { formatBossContext, formatMaterialMetadata, formatTaskContext, type BossContextRecord, type MaterialContextRecord, type TaskContextRecord } from "@/lib/ai/serialization";
 import { defaultAIAcademicPermissions, effectiveContextSelection, type AIAcademicPermissions, type ContextSelection } from "@/lib/ai/validation";
 import { resolveAcademicTimeRange } from "@/lib/ai/temporal";
@@ -86,8 +86,8 @@ function hasAny(value: string, terms: string[]) {
 }
 
 function asksRelativePlanning(value: string) {
-  return hasAny(value, ["manana", "esta semana", "proxima semana", "proximos dias", "proximas semanas", "este mes", "horario semanal"])
-    && hasAny(value, ["que estudio", "que hago", "me toca", "por donde empiezo", "como organizo", "organizame", "organiza mi estudio", "que puedo hacer", "disponible", "horario"]);
+  return hasAny(value, ["manana", "esta semana", "proxima semana", "proximos dias", "proximas semanas", "este mes", "horario semanal", "proximamente"])
+    && hasAny(value, ["que estudio", "que hago", "me toca", "por donde empiezo", "como organizo", "organizame", "organizarme", "organiza mi estudio", "planificar", "planificarme", "que puedo hacer", "disponible", "horario"]);
 }
 
 function categoryAllowed(category: AIContextCategory, permissions: AIAcademicPermissions) {
@@ -105,22 +105,28 @@ export function selectAcademicContextPlan(input: { message: string; selection?: 
   const categories: AIContextCategory[] = [];
   const add = (category: AIContextCategory) => { if (!categories.includes(category)) categories.push(category); };
 
-  const asksToday = hasAny(message, ["hoy", "ahora", "esta tarde", "esta noche", "para hoy", "que estudio", "como organizo", "organizame", "organiza mi estudio", "plan de estudio", "por donde empiezo", "que me toca"])
-    || asksRelativePlanning(message);
+  const asksPlanning = asksRelativePlanning(message);
+  const asksToday = hasAny(message, ["hoy", "ahora", "esta tarde", "esta noche", "para hoy", "que estudio", "como organizo", "organizame", "organiza mi estudio", "plan de estudio", "por donde empiezo", "que me toca"]);
   const asksTasks = hasAny(message, ["tarea", "tareas", "pendiente", "pendientes", "entrega", "entregas", "deberes", "obligacion", "obligaciones", "trabajo", "trabajos", "que tengo que hacer", "prioridades"]);
   const asksBosses = hasAny(message, ["boss", "bosses", "examen", "examenes", "prueba", "pruebas", "control", "controles", "parcial", "parciales", "evaluacion", "evaluaciones"]);
   const asksGoals = hasAny(message, ["objetivo", "objetivos", "meta", "metas", "proposito", "propositos"]);
   const asksSessions = hasAny(message, ["sesion", "sesiones", "he estudiado", "estudie", "tiempo de estudio", "minutos estudiados", "historial de estudio", "cuanto he estudiado", "habitos de estudio", "estadistica", "estadisticas"]);
   const asksMaterials = hasAny(message, ["material", "materiales", "apunte", "apuntes", "archivo", "archivos", "documento", "documentos", "pdf", "docx", "ppt", "imagen", "imagenes", "fichero", "biblioteca"]);
   const asksMaterialAnalysis = hasAny(message, ["analiza", "analizar", "resume", "resumir", "resumen", "lee", "leer", "explica el material", "segun mis apuntes", "a partir de mis apuntes", "contenido de", "extrae"]);
-  const asksPerformance = hasAny(message, ["rendimiento", "como voy", "como me va", "mis notas", "nota media", "calificacion", "calificaciones", "promedio", "media", "mejorar mi nota", "resultados", "progreso academico", "he mejorado", "me cuesta", "fortalezas", "debilidades"]);
+  const asksPerformance = hasAny(message, ["rendimiento", "como voy", "como me va", "mi progreso", "mis progresos", "progreso", "mis notas", "nota media", "calificacion", "calificaciones", "promedio", "media", "mejorar mi nota", "resultados", "progreso academico", "he mejorado", "me cuesta", "fortalezas", "debilidades"]);
   const asksSchedule = hasAny(message, ["horario", "calendario", "agenda", "disponibilidad", "disponible", "clase", "clases", "cuando tengo", "a que hora", "evento", "eventos", "cita", "citas", "hueco", "libre"]);
   const asksGamification = hasAny(message, ["xp", "experiencia", "nivel", "moneda", "monedas", "racha", "mision", "misiones", "recompensa", "recompensas", "premio", "premios", "puntos"]);
   const asksSubject = hasAny(message, ["asignatura", "asignaturas", "materia", "materias", "tema", "temas", "unidad", "unidades", "duda de", "duda sobre"]);
+  const asksBroadPersonal = hasAny(message, ["que sabes de mi", "que recuerdas de mi", "que datos tienes de mi", "que informacion tienes de mi"]);
+  const asksAmbiguousPersonal = /\b(mi|mis|mio|mios|mia|mias|tengo|he|puedo|voy)\b/.test(message);
 
   let intent: AIContextIntent = "general";
+  if (asksPlanning) {
+    intent = "planning";
+    add("tasksAndBosses"); add("schedule"); add("sessionsAndStatistics");
+  }
   if (asksToday) {
-    intent = "today";
+    if (intent === "general") intent = "today";
     add("tasksAndBosses"); add("schedule"); add("sessionsAndStatistics");
   }
   if (asksPerformance) {
@@ -152,6 +158,14 @@ export function selectAcademicContextPlan(input: { message: string; selection?: 
     add("materials");
   }
 
+  if (asksBroadPersonal) {
+    intent = "personal";
+    for (const category of CATEGORY_ORDER) add(category);
+  } else if (asksAmbiguousPersonal && !categories.length) {
+    intent = "personal";
+    add("subjects"); add("tasksAndBosses"); add("grades"); add("sessionsAndStatistics"); add("schedule"); add("materials"); add("gamification");
+  }
+
   const selection = input.selection;
   if (selection) {
     if (selection.subjectIds.length || selection.topicIds.length) add("subjects");
@@ -181,9 +195,9 @@ export function selectAcademicContextPlan(input: { message: string; selection?: 
   if (needsMaterials) addTool("consult_materials");
   if (categories.includes("gamification")) addTool("consult_gamification");
 
-  // Toda pregunta que requiera datos personales consulta las categorías
-  // autorizadas. La selección manual sólo prioriza elementos concretos.
-  if (categories.length) for (const category of CATEGORY_ORDER) add(category);
+  // Solo una pregunta personal amplia solicita todas las categorías
+  // autorizadas; el resto conserva la selección mínima por intención.
+  if (asksBroadPersonal) for (const tool of ["consult_subjects", "consult_topics", "consult_tasks", "consult_bosses", "consult_goals", "consult_grades", "consult_study_sessions", "consult_statistics", "consult_schedule", "consult_calendar", "consult_materials", "consult_gamification"]) addTool(tool);
 
   const reasons = intent === "today"
     ? ["pregunta sobre el día actual y planificación"]
@@ -229,18 +243,44 @@ function addEntry(entries: Array<{ category: AIContextCategory; item: AIContextS
   entries.push(entry);
 }
 
-async function withTimeout<T>(operation: (signal: AbortSignal) => Promise<T>, milliseconds: number): Promise<T> {
+async function withTimeout<T>(operation: (signal: AbortSignal) => Promise<T>, milliseconds: number, parentSignal?: AbortSignal): Promise<T> {
+  if (parentSignal?.aborted) throw parentSignal.reason instanceof Error ? parentSignal.reason : new Error("AI_MATERIAL_CANCELLED");
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
+  const abortWithParent = () => controller.abort(parentSignal?.reason ?? new Error("AI_MATERIAL_CANCELLED"));
+  const parentAbort = parentSignal ? new Promise<T>((_, reject) => {
+    if (parentSignal.aborted) {
+      abortWithParent();
+      reject(parentSignal.reason instanceof Error ? parentSignal.reason : new Error("AI_MATERIAL_CANCELLED"));
+      return;
+    }
+    parentSignal.addEventListener("abort", () => { abortWithParent(); reject(parentSignal.reason instanceof Error ? parentSignal.reason : new Error("AI_MATERIAL_CANCELLED")); }, { once: true });
+  }) : null;
   try {
+    const timeout = new Promise<T>((_, reject) => { timer = setTimeout(() => { const error = new Error("AI_MATERIAL_TIMEOUT"); controller.abort(error); reject(error); }, milliseconds); });
     return await Promise.race([
       operation(controller.signal),
-      new Promise<T>((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error("AI_MATERIAL_TIMEOUT")); }, milliseconds); }),
+      timeout,
+      ...(parentAbort ? [parentAbort] : []),
     ]);
   } finally {
-    controller.abort();
+    controller.abort(new Error("AI_MATERIAL_CANCELLED"));
     if (timer) clearTimeout(timer);
   }
+}
+
+async function mapWithConcurrency<T, R>(items: T[], concurrency: number, worker: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const consume = async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await worker(items[index]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => consume()));
+  return results;
 }
 
 function dayLabel(dayOfWeek: number) {
@@ -260,6 +300,8 @@ export async function buildAcademicContext(input: {
   repository: AcademicContextRepository;
   loadMaterial: (storageKey: string, signal?: AbortSignal) => Promise<Buffer>;
   materialProcessingTimeoutMs?: number;
+  materialProcessingTotalTimeoutMs?: number;
+  materialProcessingConcurrency?: number;
   now?: Date;
 }): Promise<AcademicContextResult> {
   const permissions = input.permissions ?? defaultAIAcademicPermissions;
@@ -277,32 +319,45 @@ export async function buildAcademicContext(input: {
   const planningRange = timeRange.kind === "recent" ? zonedDayRange(now, timeZone, 0, 30) : timeRange;
   const recentStart = zonedDayStart(now, timeZone, -14);
   const explicitSubjectIds = selection.subjectIds;
-  let matchedSubjectIds: string[] = [];
-  let subjectCandidates: SubjectContext[] = [];
-  if (plan.intent === "subject" && !explicitSubjectIds.length) {
-    subjectCandidates = await input.repository.subjects(input.userId, [], { limit: itemLimit });
-    const normalizedMessage = normalizeText(input.message ?? "");
-    matchedSubjectIds = subjectCandidates.filter((subject) => normalizedMessage.includes(normalizeText(subject.name))).map((subject) => subject.id);
-  }
-  const scopeSubjectIds = unique([...explicitSubjectIds, ...matchedSubjectIds]);
-  const hasManualSessions = selection.studySessionIds.length > 0;
   const warnings: string[] = [];
   const safely = <T>(category: AIContextCategory, operation: Promise<T>, fallback: T) => operation.catch(() => {
     warnings.push(`${CATEGORY_LABELS[category]}: datos no disponibles temporalmente.`);
     return fallback;
   });
+  let matchedSubjectIds: string[] = [];
+  let subjectCandidates: SubjectContext[] | null = null;
+  const normalizedMessage = normalizeText(input.message ?? "");
+  if (plan.intent === "subject" && !explicitSubjectIds.length) {
+    subjectCandidates = await safely("subjects", input.repository.subjects(input.userId, [], { limit: itemLimit }), []);
+    matchedSubjectIds = subjectCandidates.filter((subject) => normalizedMessage.includes(normalizeText(subject.name))).map((subject) => subject.id);
+  }
+  const scopeSubjectIds = unique([...explicitSubjectIds, ...matchedSubjectIds]);
+  const hasManualSessions = selection.studySessionIds.length > 0;
+  const explicitTimeRange = timeRange.explicit ? timeRange : undefined;
+  const asksScheduleToday = hasAny(normalizedMessage, ["horario de hoy", "horario hoy"]);
+  const asksScheduleTomorrow = hasAny(normalizedMessage, ["horario de manana", "horario manana"]);
+  const scheduleDayOfWeek = asksScheduleToday
+    ? zonedDayOfWeek(now, timeZone)
+    : asksScheduleTomorrow
+      ? zonedDayOfWeek(zonedDayStart(now, timeZone, 1), timeZone)
+      : explicitTimeRange && (explicitTimeRange.kind === "today" || explicitTimeRange.kind === "tomorrow")
+        ? zonedDayOfWeek(explicitTimeRange.start, timeZone)
+        : undefined;
+  const calendarRange = explicitTimeRange
+    ? { start: explicitTimeRange.kind === "week" ? explicitTimeRange.start : explicitTimeRange.start.getTime() > now.getTime() ? explicitTimeRange.start : now, end: explicitTimeRange.end }
+    : { start: now, end: planningRange.end };
 
   const [subjects, topics, tasks, bosses, goals, grades, sessions, schedule, calendar, statistics, gamification, materials] = await Promise.all([
-    plan.categories.includes("subjects") ? safely("subjects", input.repository.subjects(input.userId, selection.subjectIds, { limit: itemLimit }), []) : [],
+    plan.categories.includes("subjects") ? safely("subjects", subjectCandidates !== null ? Promise.resolve(subjectCandidates) : input.repository.subjects(input.userId, selection.subjectIds, { limit: itemLimit }), []) : [],
     input.repository.topics && plan.categories.includes("subjects") ? safely("subjects", input.repository.topics(input.userId, selection.topicIds, { limit: itemLimit, subjectIds: selection.topicIds.length ? undefined : scopeSubjectIds, timeZone }), []) : [],
     permissions.canReadTasksAndBosses && plan.categories.includes("tasksAndBosses") ? safely("tasksAndBosses", input.repository.tasks(input.userId, selection.taskIds, { limit: itemLimit, subjectIds: selection.taskIds.length ? undefined : scopeSubjectIds, from: selection.taskIds.length ? undefined : planningRange.start, to: selection.taskIds.length ? undefined : planningRange.end, onlyOpen: !selection.taskIds.length, timeZone }), []) : [],
     permissions.canReadTasksAndBosses && plan.categories.includes("tasksAndBosses") ? safely("tasksAndBosses", input.repository.bosses(input.userId, selection.bossIds, { limit: itemLimit, subjectIds: selection.bossIds.length ? undefined : scopeSubjectIds, from: selection.bossIds.length ? undefined : now, to: selection.bossIds.length ? undefined : planningRange.end, timeZone }), []) : [],
     input.repository.goals && permissions.canReadTasksAndBosses && plan.categories.includes("tasksAndBosses") ? safely("tasksAndBosses", input.repository.goals(input.userId, selection.goalIds, { limit: itemLimit, from: selection.goalIds.length ? undefined : now, to: selection.goalIds.length ? undefined : planningRange.end, timeZone }), []) : [],
-    permissions.canReadGrades && plan.categories.includes("grades") ? safely("grades", input.repository.grades(input.userId, selection.gradeIds, { limit: itemLimit, subjectIds: selection.gradeIds.length ? undefined : scopeSubjectIds, from: timeRange.kind === "month" ? timeRange.start : undefined, to: timeRange.kind === "month" ? timeRange.end : undefined, timeZone }), []) : [],
-    permissions.canReadSessionsAndStatistics && plan.categories.includes("sessionsAndStatistics") ? safely("sessionsAndStatistics", input.repository.studySessions(input.userId, selection.studySessionIds, { limit: itemLimit, subjectIds: selection.studySessionIds.length ? undefined : scopeSubjectIds, from: selection.studySessionIds.length ? undefined : timeRange.start, to: selection.studySessionIds.length ? undefined : timeRange.end, timeZone }), []) : [],
-    input.repository.schedule && permissions.canReadSchedule && plan.categories.includes("schedule") ? safely("schedule", input.repository.schedule(input.userId, { limit: itemLimit, timeZone }), []) : [],
-    input.repository.calendar && permissions.canReadSchedule && permissions.canReadTasksAndBosses && plan.categories.includes("schedule") ? safely("schedule", input.repository.calendar(input.userId, { limit: itemLimit, from: now, to: planningRange.end, timeZone }), []) : [],
-    input.repository.statistics && permissions.canReadSessionsAndStatistics && plan.categories.includes("sessionsAndStatistics") && !hasManualSessions ? safely("sessionsAndStatistics", input.repository.statistics(input.userId, { limit: itemLimit, from: timeRange.kind === "month" ? timeRange.start : recentStart, to: timeRange.kind === "month" ? timeRange.end : now, timeZone }), null) : null,
+    permissions.canReadGrades && plan.categories.includes("grades") ? safely("grades", input.repository.grades(input.userId, selection.gradeIds, { limit: itemLimit, subjectIds: selection.gradeIds.length ? undefined : scopeSubjectIds, from: explicitTimeRange?.start, to: explicitTimeRange?.end, timeZone }), []) : [],
+    permissions.canReadSessionsAndStatistics && plan.categories.includes("sessionsAndStatistics") ? safely("sessionsAndStatistics", input.repository.studySessions(input.userId, selection.studySessionIds, { limit: itemLimit, subjectIds: selection.studySessionIds.length ? undefined : scopeSubjectIds, from: selection.studySessionIds.length ? undefined : explicitTimeRange?.start, to: selection.studySessionIds.length ? undefined : explicitTimeRange?.end, timeZone }), []) : [],
+    input.repository.schedule && permissions.canReadSchedule && plan.categories.includes("schedule") ? safely("schedule", input.repository.schedule(input.userId, { limit: itemLimit, dayOfWeek: scheduleDayOfWeek, timeZone }), []) : [],
+    input.repository.calendar && permissions.canReadSchedule && permissions.canReadTasksAndBosses && plan.categories.includes("schedule") ? safely("schedule", input.repository.calendar(input.userId, { limit: itemLimit, from: calendarRange.start, to: calendarRange.end, timeZone }), []) : [],
+    input.repository.statistics && permissions.canReadSessionsAndStatistics && plan.categories.includes("sessionsAndStatistics") && !hasManualSessions ? safely("sessionsAndStatistics", input.repository.statistics(input.userId, { limit: itemLimit, from: explicitTimeRange?.start ?? recentStart, to: explicitTimeRange?.end ?? now, timeZone }), null) : null,
     input.repository.gamification && permissions.canReadGamification && plan.categories.includes("gamification") ? safely("gamification", input.repository.gamification(input.userId, { limit: itemLimit, from: zonedDayStart(now, timeZone, -7), to: now, timeZone }), null) : null,
     permissions.canReadMaterials && plan.categories.includes("materials") ? safely("materials", input.repository.materials(input.userId, selection.materialIds, { limit: itemLimit, subjectIds: selection.materialIds.length ? undefined : scopeSubjectIds, timeZone }), []) : [],
   ]);
@@ -327,35 +382,43 @@ export async function buildAcademicContext(input: {
   const images: AcademicContextResult["images"] = [];
   let imageBytes = 0;
   const shouldLoadMaterialContent = plan.analyzeMaterials && permissions.canReadMaterials;
+  const materialItems = ordered(materials, selection.materialIds.length ? selection.materialIds : materials.map((material) => material.id));
   const materialProcessingTimeoutMs = Math.max(100, Math.min(30_000, Math.floor(input.materialProcessingTimeoutMs ?? MAX_AI_MATERIAL_PROCESSING_MS)));
-  for (const item of ordered(materials, selection.materialIds.length ? selection.materialIds : materials.map((material) => material.id))) {
-    const snapshot = { type: "material", id: item.id, label: item.name } as const;
+  const materialProcessingTotalTimeoutMs = Math.max(100, Math.min(60_000, Math.floor(input.materialProcessingTotalTimeoutMs ?? MAX_AI_MATERIAL_TOTAL_PROCESSING_MS)));
+  const materialProcessingConcurrency = Math.max(1, Math.min(MAX_AI_MATERIAL_CONCURRENCY, Math.floor(input.materialProcessingConcurrency ?? MAX_AI_MATERIAL_CONCURRENCY)));
+  const totalMaterialController = new AbortController();
+  const totalMaterialTimer = setTimeout(() => totalMaterialController.abort(new Error("AI_MATERIAL_TIMEOUT")), materialProcessingTotalTimeoutMs);
+  try {
     if (!shouldLoadMaterialContent) {
-      addEntry(entries, { category: "materials", item: snapshot, text: `${formatMaterialMetadata(item)}; solo metadatos` });
-      continue;
-    }
-    if (item.size > MAX_AI_MATERIAL_BYTES) {
-      addEntry(entries, { category: "materials", item: snapshot, text: `[Material no procesado] ${item.name}; supera el límite de análisis` });
-      warnings.push(`${item.name}: AI_MATERIAL_TOO_LARGE`);
-      continue;
-    }
-    try {
-      const content = await withTimeout((signal) => input.loadMaterial(item.storageKey, signal), materialProcessingTimeoutMs);
-      if (item.mimeType.startsWith("image/") && images.length < 3 && content.length <= 10 * 1024 * 1024 && imageBytes + content.length <= 15 * 1024 * 1024) {
-        images.push({ id: item.id, name: item.name, mimeType: item.mimeType, base64: content.toString("base64") });
-        imageBytes += content.length;
-        addEntry(entries, { category: "materials", item: snapshot, text: `[Imagen adjunta] ${item.name}` });
-      } else {
-        const remainingCharacterBudget = Math.max(0, input.maxCharacters - entries.reduce((total, entry) => total + entry.text.length, 0));
-        if (!remainingCharacterBudget) { warnings.push(`${item.name}: AI_MATERIAL_BUDGET_EXHAUSTED`); continue; }
-        const extracted = await withTimeout(() => extractMaterialText(item.mimeType, content, Math.min(remainingCharacterBudget, 8_000)), materialProcessingTimeoutMs);
-        addEntry(entries, { category: "materials", item: snapshot, text: `${formatMaterialMetadata(item)}\nContenido:\n${extracted || "(sin texto extraíble)"}` });
+      for (const item of materialItems) addEntry(entries, { category: "materials", item: { type: "material", id: item.id, label: item.name }, text: `${formatMaterialMetadata(item)}; solo metadatos` });
+    } else {
+      const processed = await mapWithConcurrency(materialItems, materialProcessingConcurrency, async (item) => {
+        const snapshot = { type: "material", id: item.id, label: item.name } as const;
+        if (item.size > MAX_AI_MATERIAL_BYTES) return { item, snapshot, text: `[Material no procesado] ${item.name}; supera el límite de análisis`, warning: `${item.name}: AI_MATERIAL_TOO_LARGE` };
+        try {
+          const content = await withTimeout((signal) => input.loadMaterial(item.storageKey, signal), materialProcessingTimeoutMs, totalMaterialController.signal);
+          if (item.mimeType.startsWith("image/") && content.length <= 10 * 1024 * 1024) return { item, snapshot, content };
+          const extracted = await withTimeout((signal) => extractMaterialText(item.mimeType, content, 8_000, signal), materialProcessingTimeoutMs, totalMaterialController.signal);
+          return { item, snapshot, text: `${formatMaterialMetadata(item)}\nContenido:\n${extracted || "(sin texto extraíble)"}` };
+        } catch (error) {
+          const code = totalMaterialController.signal.aborted
+            ? "AI_MATERIAL_TIMEOUT"
+            : error instanceof Error && /^AI_MATERIAL_[A-Z_]+$/.test(error.message) ? error.message : "AI_MATERIAL_UNAVAILABLE";
+          return { item, snapshot, text: `[Material no legible] ${item.name}`, warning: `${item.name}: ${code}` };
+        }
+      });
+      for (const result of processed) {
+        if (result.warning) warnings.push(result.warning);
+        if (result.content && result.item.mimeType.startsWith("image/") && images.length < 3 && imageBytes + result.content.length <= 15 * 1024 * 1024) {
+          images.push({ id: result.item.id, name: result.item.name, mimeType: result.item.mimeType, base64: result.content.toString("base64") });
+          imageBytes += result.content.length;
+          addEntry(entries, { category: "materials", item: result.snapshot, text: `[Imagen adjunta] ${result.item.name}` });
+        } else if (result.text) addEntry(entries, { category: "materials", item: result.snapshot, text: result.text });
       }
-    } catch (error) {
-      addEntry(entries, { category: "materials", item: snapshot, text: `[Material no legible] ${item.name}` });
-      const code = error instanceof Error && /^AI_MATERIAL_[A-Z_]+$/.test(error.message) ? error.message : "AI_MATERIAL_UNAVAILABLE";
-      warnings.push(`${item.name}: ${code}`);
     }
+  } finally {
+    clearTimeout(totalMaterialTimer);
+    totalMaterialController.abort(new Error("AI_MATERIAL_CANCELLED"));
   }
 
   const noData = CATEGORY_ORDER.filter((category) => plan.categories.includes(category) && categoryAllowed(category, permissions) && !entries.some((entry) => entry.category === category));

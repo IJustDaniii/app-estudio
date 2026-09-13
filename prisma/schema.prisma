@@ -129,6 +129,7 @@ model AIMessage {
   model           String?
   errorCode       String?
   contextSnapshot Json?
+  requestId        String?
   inputTokens     Int?
   outputTokens    Int?
   chatId          String
@@ -139,6 +140,7 @@ model AIMessage {
   updatedAt       DateTime        @updatedAt
 
   @@index([userId, chatId, createdAt])
+  @@unique([userId, requestId])
 }
 
 model Subject {
