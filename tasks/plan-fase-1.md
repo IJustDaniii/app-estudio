@@ -65,6 +65,14 @@ Prisma y validacion
 | Un borrado accidental elimina informacion | Confirmacion en interfaz y eliminacion acotada en servidor. |
 | La nota necesaria resulta imposible | Se informa si supera 10 o si ya se alcanza el objetivo, sin ocultar el calculo. |
 
+## Ronda final de correcciones
+
+- [x] Fechas y horas convertidas y guardadas segun la zona horaria elegida; pruebas de Madrid y Nueva York cerca de medianoche.
+- [x] Fechas sin hora tratadas como dias de calendario para notas, objetivos y cambios puntuales de horario.
+- [x] El panel vuelve a leer XP y monedas despues de actualizar misiones, para mostrar la recompensa sin una recarga adicional.
+- [x] El cambio de asignatura de una tarea, tema o Boss con materiales asociados queda bloqueado con una explicacion clara; se mantienen las comprobaciones de cuenta.
+- [x] Pruebas completas, tipos, lint, compilacion, Prisma, dependencias, navegador y revision de permisos repetidos.
+
 ## Estado
 
 El estado vivo de las tareas esta en `tasks/todo-fase-1.md`. El plan de Fase 3 de `tasks/plan.md` se conserva sin cambios porque pertenece a otro trabajo ya cerrado.

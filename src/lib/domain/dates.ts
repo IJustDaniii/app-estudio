@@ -104,3 +104,50 @@ export function formatDateForTimeZone(date: Date | null | undefined, timeZone = 
   const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "00";
   return `${value("year")}-${value("month")}-${value("day")} ${value("hour")}:${value("minute")} (${safeTimeZone})`;
 }
+
+function assertValidCalendarParts(parts: CalendarParts) {
+  const candidate = new Date(Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second));
+  if (candidate.getUTCFullYear() !== parts.year || candidate.getUTCMonth() + 1 !== parts.month || candidate.getUTCDate() !== parts.day || candidate.getUTCHours() !== parts.hour || candidate.getUTCMinutes() !== parts.minute || candidate.getUTCSeconds() !== parts.second) {
+    throw new Error("INVALID_LOCAL_DATE");
+  }
+}
+
+function parseCalendarInput(value: string, withTime: boolean): CalendarParts {
+  const match = withTime
+    ? /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value)
+    : /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) throw new Error("INVALID_LOCAL_DATE");
+  const parts = { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]), hour: Number(match[4] ?? 0), minute: Number(match[5] ?? 0), second: Number(match[6] ?? 0) };
+  if (parts.month < 1 || parts.month > 12 || parts.day < 1 || parts.day > 31 || parts.hour > 23 || parts.minute > 59 || parts.second > 59) throw new Error("INVALID_LOCAL_DATE");
+  assertValidCalendarParts(parts);
+  return parts;
+}
+
+export function localDateTimeInputValue(date: Date | null | undefined, timeZone = DEFAULT_TIME_ZONE) {
+  if (!date) return "";
+  const parts = calendarParts(date, timeZone);
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}T${String(parts.hour).padStart(2, "0")}:${String(parts.minute).padStart(2, "0")}`;
+}
+
+export function localDateInputValue(date: Date | null | undefined, timeZone = DEFAULT_TIME_ZONE) {
+  if (!date) return "";
+  const parts = calendarParts(date, timeZone);
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+}
+
+export function dateOnlyInputValue(date: Date | null | undefined) {
+  return date ? date.toISOString().slice(0, 10) : "";
+}
+
+export function parseLocalDateTime(value: string, timeZone = DEFAULT_TIME_ZONE) {
+  return zonedCalendarStart(parseCalendarInput(value, true), normalizeTimeZone(timeZone));
+}
+
+export function parseLocalDate(value: string, timeZone = DEFAULT_TIME_ZONE) {
+  return zonedCalendarStart(parseCalendarInput(value, false), normalizeTimeZone(timeZone));
+}
+
+export function parseDateOnly(value: string) {
+  const parts = parseCalendarInput(value, false);
+  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
+}

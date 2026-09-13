@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import type { ParsedAIAction } from "@/lib/ai/action-contract";
 import { prisma } from "@/lib/prisma";
-import { ensureOwnedMaterialReferences } from "@/lib/materials/references";
+import { ensureAcademicEntitySubjectChangeAllowed, ensureOwnedMaterialReferences } from "@/lib/materials/references";
 import { deleteMaterialWithCompensation } from "@/lib/materials/service";
 import { getStorageProvider } from "@/lib/materials/storage";
 import { materialMetadataSchema } from "@/lib/validation";
@@ -78,8 +78,12 @@ export async function executeAIAction(db: Database, userId: string, input: Parse
       return db.topic.create({ data: { name: data.name, subjectId: data.subjectId, userId }, select: { id: true, name: true } });
     }
     case "update_topic": {
-      await owned(db, userId, "topic", value.id as string);
-      if (value.subjectId) await ownedSubject(db, userId, value.subjectId as string);
+      const existing = await db.topic.findFirst({ where: { id: value.id as string, userId }, select: { id: true, subjectId: true } });
+      if (!existing) throw new Error("AI_ACTION_NOT_FOUND");
+      if (value.subjectId !== undefined) {
+        await ownedSubject(db, userId, value.subjectId as string | null);
+        await ensureAcademicEntitySubjectChangeAllowed(userId, "topicId", existing.id, existing.subjectId, value.subjectId as string | null, db);
+      }
       return updateResult((await db.topic.updateMany({ where: { id: value.id as string, userId }, data: actionData(value) as Prisma.TopicUpdateManyMutationInput })).count);
     }
     case "delete_topic":
@@ -93,8 +97,12 @@ export async function executeAIAction(db: Database, userId: string, input: Parse
       return db.task.create({ data: { ...actionData(data), subjectId, userId } as Prisma.TaskUncheckedCreateInput, select: { id: true, title: true, status: true } });
     }
     case "update_task": {
-      await owned(db, userId, "task", value.id as string);
-      if (value.subjectId !== undefined) await ownedSubject(db, userId, value.subjectId as string | null);
+      const existing = await db.task.findFirst({ where: { id: value.id as string, userId }, select: { id: true, subjectId: true } });
+      if (!existing) throw new Error("AI_ACTION_NOT_FOUND");
+      if (value.subjectId !== undefined) {
+        await ownedSubject(db, userId, value.subjectId as string | null);
+        await ensureAcademicEntitySubjectChangeAllowed(userId, "taskId", existing.id, existing.subjectId, value.subjectId as string | null, db);
+      }
       return updateResult((await db.task.updateMany({ where: { id: value.id as string, userId }, data: actionData(value) as Prisma.TaskUpdateManyMutationInput })).count);
     }
     case "delete_task":
@@ -108,8 +116,12 @@ export async function executeAIAction(db: Database, userId: string, input: Parse
       return db.boss.create({ data: { ...actionData(data), userId } as Prisma.BossUncheckedCreateInput, select: { id: true, title: true } });
     }
     case "update_boss": {
-      await owned(db, userId, "boss", value.id as string);
-      if (value.subjectId) await ownedSubject(db, userId, value.subjectId as string);
+      const existing = await db.boss.findFirst({ where: { id: value.id as string, userId }, select: { id: true, subjectId: true } });
+      if (!existing) throw new Error("AI_ACTION_NOT_FOUND");
+      if (value.subjectId !== undefined) {
+        await ownedSubject(db, userId, value.subjectId as string | null);
+        await ensureAcademicEntitySubjectChangeAllowed(userId, "bossId", existing.id, existing.subjectId, value.subjectId as string | null, db);
+      }
       return updateResult((await db.boss.updateMany({ where: { id: value.id as string, userId }, data: actionData(value) as Prisma.BossUpdateManyMutationInput })).count);
     }
     case "delete_boss":

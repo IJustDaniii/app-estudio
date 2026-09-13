@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dateOnlyForLocalDay, formatDateForTimeZone, localDayBounds, zonedDateKey, zonedDayOfWeek, zonedDayRange } from "@/lib/domain/dates";
+import { dateOnlyForLocalDay, dateOnlyInputValue, formatDateForTimeZone, localDateInputValue, localDateTimeInputValue, localDayBounds, parseDateOnly, parseLocalDate, parseLocalDateTime, zonedDateKey, zonedDayOfWeek, zonedDayRange } from "@/lib/domain/dates";
 import { calculateStudyStreak } from "@/lib/domain/progress";
 
 describe("límites diarios", () => {
@@ -25,5 +25,24 @@ describe("límites diarios", () => {
 
   it("calcula la racha usando el día local del usuario", () => {
     expect(calculateStudyStreak([new Date("2026-09-12T23:30:00.000Z")], new Date("2026-09-13T00:30:00.000Z"), "Europe/Madrid")).toBe(1);
+  });
+  it("convierte correctamente una hora cercana a medianoche en Madrid y Nueva York", () => {
+    const instant = new Date("2026-09-14T00:30:00.000Z");
+
+    expect(zonedDateKey(instant, "Europe/Madrid")).toBe("2026-09-14");
+    expect(zonedDateKey(instant, "America/New_York")).toBe("2026-09-13");
+    expect(localDateTimeInputValue(instant, "Europe/Madrid")).toBe("2026-09-14T02:30");
+    expect(localDateTimeInputValue(instant, "America/New_York")).toBe("2026-09-13T20:30");
+    expect(parseLocalDateTime("2026-09-14T02:30", "Europe/Madrid").toISOString()).toBe(instant.toISOString());
+    expect(parseLocalDateTime("2026-09-13T20:30", "America/New_York").toISOString()).toBe(instant.toISOString());
+  });
+
+  it("mantiene el día elegido para objetivos, notas y cambios de horario", () => {
+    const instant = new Date("2026-09-14T00:30:00.000Z");
+
+    expect(localDateInputValue(instant, "America/New_York")).toBe("2026-09-13");
+    expect(parseLocalDate("2026-09-13", "America/New_York").toISOString()).toBe("2026-09-13T04:00:00.000Z");
+    expect(dateOnlyInputValue(parseDateOnly("2026-09-13"))).toBe("2026-09-13");
+    expect(parseDateOnly("2026-09-13").toISOString()).toBe("2026-09-13T00:00:00.000Z");
   });
 });

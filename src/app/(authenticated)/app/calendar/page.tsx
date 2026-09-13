@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { addCalendarDays, calendarDateKeys, effectiveClassesForDate, normalizeCalendarView, shiftCalendarMonth, type CalendarView, type EffectiveClass } from "@/lib/domain/calendar";
-import { zonedCalendarStart, zonedDateKey, zonedDayRange, zonedMonthRange, zonedWeekRange, normalizeTimeZone } from "@/lib/domain/dates";
+import { dateOnlyInputValue, zonedCalendarStart, zonedDateKey, zonedDayRange, zonedMonthRange, zonedWeekRange, normalizeTimeZone } from "@/lib/domain/dates";
 import { prisma } from "@/lib/prisma";
 
 const weekdays = ["L", "M", "X", "J", "V", "S", "D"];
@@ -37,7 +37,7 @@ type CalendarGoal = { id: string; title: string; targetDate: Date | null };
 function CalendarDayContents({ dayKey, compact = false, timeZone, classes, tasks, bosses, goals }: { dayKey: string; compact?: boolean; timeZone: string; classes: EffectiveClass[]; tasks: CalendarTask[]; bosses: CalendarBoss[]; goals: CalendarGoal[] }) {
   const dayTasks = tasks.filter((task) => task.dueDate && zonedDateKey(task.dueDate, timeZone) === dayKey);
   const dayBosses = bosses.filter((boss) => zonedDateKey(boss.date, timeZone) === dayKey);
-  const dayGoals = goals.filter((goal) => goal.targetDate && zonedDateKey(goal.targetDate, timeZone) === dayKey);
+  const dayGoals = goals.filter((goal) => goal.targetDate && dateOnlyInputValue(goal.targetDate) === dayKey);
   return <div className={compact ? "space-y-1" : "space-y-3"}>
     {classes.length > 0 && <div className="space-y-1"><p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Clases</p>{classes.map((item) => <p key={item.id} className="truncate rounded bg-primary/10 px-2 py-1 text-xs"><span className="font-semibold">{item.startTime}–{item.endTime}</span> · {item.subjectName}{item.room ? ` · ${item.room}` : ""}{item.isChange ? " · cambio" : ""}</p>)}</div>}
     {dayTasks.length > 0 && <div className="space-y-1"><p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Tareas</p>{dayTasks.map((task) => <Link href="/app/tasks" key={task.id} className={`block truncate rounded bg-muted px-2 py-1 text-xs hover:bg-primary/10 ${task.status === "COMPLETED" ? "line-through opacity-60" : ""}`}>{task.planningMode === "FIXED_DEADLINE" ? "Entrega" : "Estudio"} · {task.title}</Link>)}</div>}
@@ -66,7 +66,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const [tasks, bosses, goals, entries, changes] = await Promise.all([
     prisma.task.findMany({ where: { userId, dueDate: { gte: range.start, lt: range.end } }, select: { id: true, title: true, dueDate: true, planningMode: true, status: true } }),
     prisma.boss.findMany({ where: { userId, date: { gte: range.start, lt: range.end } }, select: { id: true, title: true, date: true } }),
-    prisma.goal.findMany({ where: { userId, targetDate: { gte: range.start, lt: range.end } }, select: { id: true, title: true, targetDate: true } }),
+    prisma.goal.findMany({ where: { userId, targetDate: { gte: databaseDateStart, lt: databaseDateEnd } }, select: { id: true, title: true, targetDate: true } }),
     prisma.timetableEntry.findMany({ where: { userId }, orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }], include: { subject: { select: { name: true } } } }),
     prisma.timetableChange.findMany({ where: { userId, date: { gte: databaseDateStart, lt: databaseDateEnd } }, orderBy: { startTime: "asc" }, include: { subject: { select: { name: true } } } }),
   ]);

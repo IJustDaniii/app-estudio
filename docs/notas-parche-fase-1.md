@@ -16,6 +16,7 @@ Fecha de cierre: 13 de septiembre de 2026.
 - Calendario diario, semanal y mensual, respetando la zona horaria del perfil.
 - Zona horaria visible y configurable desde Cuenta.
 - Vista de mañana con clases, tareas pendientes y materiales necesarios.
+- Conversión segura de fechas y horas usando la zona horaria elegida por cada cuenta, con pruebas cerca de medianoche en Madrid y Nueva York.
 
 ## Corregido
 
@@ -23,6 +24,8 @@ Fecha de cierre: 13 de septiembre de 2026.
 - Las ediciones actualizan también el detalle de la asignatura relacionada.
 - Las vistas de calendario dejan de depender de la fecha UTC del servidor para decidir el día que ve la persona.
 - La edición de una tarea fija vencida no puede esquivar la protección cambiando su modalidad.
+- Las notas, objetivos y cambios puntuales de horario conservan el día escrito, sin desplazarse al cambiar de zona.
+- Un cambio de asignatura que dejaría materiales incoherentes se bloquea y explica cómo resolverlo.
 
 ## Solucionado
 
@@ -30,22 +33,25 @@ Fecha de cierre: 13 de septiembre de 2026.
 - Se añadieron confirmaciones visibles para las eliminaciones principales.
 - Se mantuvo el aislamiento por cuenta en páginas, acciones, API de materiales y asociaciones.
 - Se añadió el despliegue reproducible de migraciones mediante `npm run db:deploy`.
+- El panel vuelve a leer XP y monedas después de actualizar una misión; la cuenta temporal del navegador se eliminó al terminar.
 
 ## Pruebas realizadas
 
-- 35 grupos de pruebas y 202 pruebas automáticas: todas correctas.
+- 36 grupos de pruebas y 211 pruebas automáticas: todas correctas.
 - Lint sin avisos, revisión de tipos correcta y compilación de producción correcta.
 - Prisma: esquema válido, formato correcto, migraciones desplegadas y sin migraciones pendientes.
 - Auditoría de dependencias: 0 vulnerabilidades con `npm audit --audit-level=high`.
 - Recorrido de navegador con datos de prueba: inicio, mañana, asignaturas, detalle de asignatura, tareas, Bosses, notas, objetivos, horario, materiales, calendario diario/semanal/mensual y Cuenta.
 - La pestaña final de comprobación no mostró errores ni avisos del navegador.
 - Revisión final de permisos: las lecturas y modificaciones académicas usan la cuenta autenticada; las asociaciones también comprueban la cuenta propietaria.
+- Pruebas específicas de zona horaria, recompensa inmediata y cambio de asignatura con materiales: correctas.
 
 ## Cambios en la base de datos
 
 - Migración `20260913210000_phase1_academic_core`: campos académicos ampliados, estados, pesos y cambios puntuales de horario.
 - Migración `20260913211000_phase1_goal_subject`: asociación opcional de objetivos a asignaturas.
 - `prisma migrate deploy` confirmó que las 14 migraciones del repositorio están aplicadas y que no quedan cambios pendientes.
+- No se añadió ninguna migración en esta ronda porque el esquema no cambió.
 
 ## Limitaciones restantes
 

@@ -20,7 +20,8 @@ export async function getDashboardData() {
   const tomorrowDatabaseEnd = new Date(`${zonedDateKey(tomorrowEnd, timeZone)}T00:00:00.000Z`);
   const missionDate = new Date(`${zonedDateKey(now, timeZone)}T00:00:00.000Z`);
   await refreshDailyMissionsForUser(userId, now);
-  const user = { name: userRecord.name, xp: userRecord.xp, coins: userRecord.coins };
+  const updatedUserRecord = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { name: true, xp: true, coins: true } });
+  const user = { name: updatedUserRecord.name, xp: updatedUserRecord.xp, coins: updatedUserRecord.coins };
 
   const [tasks, nextBoss, todayStudy, todayCompleted, missions, sessionDates, activePet, tomorrowTasks, tomorrowBosses, tomorrowEntries, tomorrowChanges] = await Promise.all([
     prisma.task.findMany({ where: { userId, status: { not: "COMPLETED" } }, orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }], include: { subject: { include: { bosses: { where: { date: { gte: now } }, orderBy: { date: "asc" }, take: 1 } } } } }),

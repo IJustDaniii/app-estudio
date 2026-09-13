@@ -2,11 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { parseAIAction } from "@/lib/ai/action-contract";
 
 const ensureReferences = vi.hoisted(() => vi.fn());
+const ensureSubjectChange = vi.hoisted(() => vi.fn());
 const deleteWithCompensation = vi.hoisted(() => vi.fn());
 const storageProvider = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/prisma", () => ({ prisma: {} }));
-vi.mock("@/lib/materials/references", () => ({ ensureOwnedMaterialReferences: ensureReferences }));
+vi.mock("@/lib/materials/references", () => ({ ensureOwnedMaterialReferences: ensureReferences, ensureAcademicEntitySubjectChangeAllowed: ensureSubjectChange }));
 vi.mock("@/lib/materials/service", () => ({ deleteMaterialWithCompensation: deleteWithCompensation }));
 vi.mock("@/lib/materials/storage", () => ({ getStorageProvider: storageProvider }));
 

@@ -10,7 +10,7 @@ Se revisó que el núcleo académico permite crear, editar, consultar y borrar a
 
 Ejecutadas desde el árbol limpio basado en `main`:
 
-- `npm test`: 35 grupos, 202 pruebas correctas.
+- `npm test`: 36 grupos, 211 pruebas correctas.
 - `npm run lint`: correcto, sin avisos.
 - `npm run typecheck`: correcto.
 - `npm run build`: compilación de producción correcta y 28 rutas generadas.
@@ -46,6 +46,15 @@ Con una cuenta de prueba se visualizaron correctamente:
 - Cuenta con zona horaria visible y seleccionable.
 
 La pestaña final no registró errores ni avisos del navegador.
+
+## Ronda final de correcciones
+
+- Se probaron fechas con hora cerca del cambio de dia: el mismo instante se muestra como 14 de septiembre y 13 de septiembre, respectivamente, en Madrid y Nueva York; el formulario conserva la hora local elegida.
+- Las notas, objetivos y cambios puntuales de horario conservan el dia escrito, sin desplazarlo por la hora del servidor.
+- El panel vuelve a leer el usuario despues de refrescar las misiones. La prueba verifica que XP y monedas reflejan la recompensa inmediatamente.
+- Cambiar de asignatura una tarea, un tema o un Boss con materiales asociados se rechaza con un mensaje claro. Si no hay materiales, el cambio sigue permitido. La comprobacion de pertenencia por cuenta se mantiene en todos los casos.
+- El navegador se recorrio con la cuenta temporal en Madrid y Nueva York. Se comprobaron las vistas de dia, semana y mes, las pantallas academicas y el detalle de una asignatura. La pestaña limpia usada para el recorrido final no registro errores ni avisos nuevos.
+- Esta ronda no necesito una migracion: no se cambio el esquema. `prisma migrate deploy` y `prisma migrate status` confirmaron que la base de datos sigue al dia.
 
 ## Seguridad y permisos
 

@@ -25,6 +25,14 @@
 - [x] Confirmaciones de borrado y pruebas de aislamiento entre cuentas.
 - [x] Documentacion, auditoria, notas del parche y revision final.
 
+## Ronda final de correcciones
+
+- [x] Zona horaria comprobada con Madrid y Nueva York, incluyendo un cambio de dia cerca de medianoche.
+- [x] Recompensas de misiones comprobadas sin segunda recarga del panel.
+- [x] Coherencia y proteccion de materiales comprobadas al cambiar la asignatura de tareas, temas y Bosses.
+- [x] Cuenta de prueba aislada y eliminada tras el recorrido.
+- [x] 36 grupos y 211 pruebas automaticas correctas en la ronda final.
+
 ## Checkpoints
 
 - [x] Tras Bloque 1: pruebas, lint, tipos, compilacion y migracion revisados.

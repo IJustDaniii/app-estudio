@@ -13,6 +13,8 @@ type MaterialReferences = {
   isCompletedExam: boolean;
 };
 
+export type AcademicMaterialReferenceField = "topicId" | "taskId" | "bossId";
+
 export type MaterialMetadataUpdate = MaterialReferences & { name: string; description: string | null; type: MaterialTypeValue; isFavorite: boolean };
 
 export function materialMetadataUpdate(values: MaterialMetadataUpdate, references: MaterialReferences) {
@@ -24,6 +26,12 @@ export function resolveMaterialSubjectId(explicitSubjectId: string | null, refer
   if (derived.length > 1) throw new Error("MATERIAL_SUBJECT_MISMATCH");
   if (explicitSubjectId && derived.length && explicitSubjectId !== derived[0]) throw new Error("MATERIAL_SUBJECT_MISMATCH");
   return explicitSubjectId ?? derived[0] ?? null;
+}
+
+export async function ensureAcademicEntitySubjectChangeAllowed(userId: string, referenceField: AcademicMaterialReferenceField, entityId: string, currentSubjectId: string | null, nextSubjectId: string | null, database: Database = prisma) {
+  if (currentSubjectId === nextSubjectId) return;
+  const materialCount = await database.material.count({ where: { userId, [referenceField]: entityId } });
+  if (materialCount > 0) throw new Error("MATERIALS_SUBJECT_CHANGE_BLOCKED");
 }
 
 export async function ensureOwnedMaterialReferences(userId: string, values: MaterialReferences, database: Database = prisma) {
