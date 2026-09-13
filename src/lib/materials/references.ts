@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import type { MaterialTypeValue } from "@/lib/materials/constants";
 import { prisma } from "@/lib/prisma";
 
 type Database = typeof prisma | Prisma.TransactionClient;
@@ -8,8 +9,15 @@ type MaterialReferences = {
   topicId: string | null;
   taskId: string | null;
   bossId: string | null;
+  isFavorite?: boolean;
   isCompletedExam: boolean;
 };
+
+export type MaterialMetadataUpdate = MaterialReferences & { name: string; description: string | null; type: MaterialTypeValue; isFavorite: boolean };
+
+export function materialMetadataUpdate(values: MaterialMetadataUpdate, references: MaterialReferences) {
+  return { ...references, name: values.name, description: values.description, type: values.type, isFavorite: values.isFavorite, isCompletedExam: values.isCompletedExam };
+}
 
 export function resolveMaterialSubjectId(explicitSubjectId: string | null, referencedSubjectIds: Array<string | null | undefined>) {
   const derived = [...new Set(referencedSubjectIds.filter((value): value is string => Boolean(value)))];

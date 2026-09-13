@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { ConfirmSubmit } from "@/components/confirm-submit";
 import { SubjectIcon } from "@/components/subject-icon";
 import { TaskEditor } from "@/components/task-editor";
+import { BossEditor } from "@/components/boss-editor";
 
 describe("interfaz del nucleo academico", () => {
   it("renderiza un icono del catalogo sin insertar texto como marcado", () => {
@@ -29,5 +30,18 @@ describe("interfaz del nucleo academico", () => {
     expect(markup).toContain("Estudio flexible");
     expect(markup).toContain("Llevar impreso");
     expect(markup).toContain("estimatedMinutes");
+  });
+
+  it("permite recorrer los tres estados del Boss y guardar sus notas", () => {
+    const markup = renderToStaticMarkup(createElement(BossEditor, {
+      action: () => undefined,
+      boss: { id: "cm12345678901234567890123", title: "Examen", subjectId: "cm12345678901234567890124", date: new Date("2026-10-01T09:00:00.000Z"), topics: ["Tema 1"], difficulty: 3, preparation: 50, status: "PREPARED", targetGrade: 8, expectedGrade: 7, actualGrade: null },
+      subjects: [{ id: "cm12345678901234567890124", name: "Historia" }],
+    }));
+    expect(markup).toContain("Próximo");
+    expect(markup).toContain("Preparado");
+    expect(markup).toContain("Realizado");
+    expect(markup).toContain("actualGrade");
+    expect(markup).toContain("Tema 1");
   });
 });

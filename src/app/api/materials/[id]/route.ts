@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { auth } from "@/auth";
-import { ensureOwnedMaterialReferences } from "@/lib/materials/references";
+import { ensureOwnedMaterialReferences, materialMetadataUpdate } from "@/lib/materials/references";
 import { materialOwnershipWhere } from "@/lib/materials/queries";
 import { deleteMaterialWithCompensation } from "@/lib/materials/service";
 import { getStorageProvider } from "@/lib/materials/storage";
@@ -47,7 +47,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   try {
     const values = materialMetadataSchema.parse(await request.json());
     const references = await ensureOwnedMaterialReferences(userId, values);
-    await prisma.material.update({ where: { id: material.id }, data: { ...references, name: values.name, description: values.description, type: values.type, isFavorite: values.isFavorite } });
+    await prisma.material.update({ where: { id: material.id }, data: materialMetadataUpdate(values, references) });
     return Response.json({ ok: true });
   } catch {
     return Response.json({ error: "Los datos del material no son válidos" }, { status: 400 });
