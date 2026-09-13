@@ -6,10 +6,12 @@ import { AuthError } from "next-auth";
 import { hash } from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { z } from "zod";
 import { signIn, signOut, requireUserId } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { DEMO_SUBJECTS } from "@/lib/demo-subjects";
 import { rewardsForStudyMinutes, taskCompletionReward } from "@/lib/domain/progress";
+import { canRescheduleTask } from "@/lib/domain/academic-rules";
 import { refreshDailyMissionsForUser } from "@/lib/domain/missions-service";
 import { createStudyStartToken, sameStudySessionRequest, StudySessionError, validateServerStudySession, verifyStudyStartToken, type StudySessionErrorCode } from "@/lib/domain/study-session";
 import { withSerializableRetry } from "@/lib/domain/transactions";
@@ -26,6 +28,7 @@ import {
   subjectSchema,
   taskSchema,
   timetableSchema,
+  timetableChangeSchema,
   topicSchema,
   cosmeticPurchaseSchema,
   eggIdActionSchema,
@@ -113,6 +116,17 @@ export async function createSubject(formData: FormData) {
   const data = subjectSchema.parse(formObject(formData));
   await prisma.subject.create({ data: { ...data, userId } });
   revalidatePath("/app");
+  revalidatePath("/app/subjects");
+}
+
+export async function updateSubject(formData: FormData) {
+  const userId = await requireUserId();
+  const id = z.string().cuid().parse(String(formData.get("id") ?? ""));
+  const data = subjectSchema.parse(formObject(formData));
+  await prisma.subject.updateMany({ where: { id, userId }, data });
+  revalidatePath("/app");
+  revalidatePath("/app/subjects");
+  revalidatePath(`/app/subjects/${id}`);
 }
 
 export async function deleteSubject(formData: FormData) {
@@ -120,6 +134,7 @@ export async function deleteSubject(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   await prisma.subject.deleteMany({ where: { id, userId } });
   revalidatePath("/app");
+  revalidatePath("/app/subjects");
 }
 
 export async function createTopic(formData: FormData) {
@@ -130,12 +145,66 @@ export async function createTopic(formData: FormData) {
   revalidatePath("/app/subjects");
 }
 
+export async function updateTopic(formData: FormData) {
+  const userId = await requireUserId();
+  const id = z.string().cuid().parse(String(formData.get("id") ?? ""));
+  const data = topicSchema.parse(formObject(formData));
+  await ensureOwnedSubject(userId, data.subjectId);
+  await prisma.topic.updateMany({ where: { id, userId }, data });
+  revalidatePath("/app/subjects");
+  revalidatePath(`/app/subjects/${data.subjectId}`);
+}
+
+export async function deleteTopic(formData: FormData) {
+  const userId = await requireUserId();
+  const id = z.string().cuid().parse(String(formData.get("id") ?? ""));
+  await prisma.topic.deleteMany({ where: { id, userId } });
+  revalidatePath("/app/subjects");
+}
+
 export async function createTimetableEntry(formData: FormData) {
   const userId = await requireUserId();
   const data = timetableSchema.parse(formObject(formData));
   await ensureOwnedSubject(userId, data.subjectId);
   await prisma.timetableEntry.create({ data: { ...data, userId } });
   revalidatePath("/app/timetable");
+}
+
+export async function createTimetableChange(formData: FormData) {
+  const userId = await requireUserId();
+  const data = timetableChangeSchema.parse(formObject(formData));
+  const { id: _id, ...changeData } = data;
+  void _id;
+  await ensureOwnedSubject(userId, changeData.subjectId);
+  if (changeData.baseEntryId && !(await prisma.timetableEntry.findFirst({ where: { id: changeData.baseEntryId, userId }, select: { id: true } }))) {
+    throw new Error("INVALID_TIMETABLE_ENTRY");
+  }
+  await prisma.timetableChange.create({ data: { ...changeData, userId } });
+  revalidatePath("/app/timetable");
+  revalidatePath("/app");
+}
+
+export async function updateTimetableChange(formData: FormData) {
+  const userId = await requireUserId();
+  const id = z.string().cuid().parse(String(formData.get("id") ?? ""));
+  const data = timetableChangeSchema.parse(formObject(formData));
+  const { id: _ignoredId, ...changeData } = data;
+  void _ignoredId;
+  await ensureOwnedSubject(userId, changeData.subjectId);
+  if (changeData.baseEntryId && !(await prisma.timetableEntry.findFirst({ where: { id: changeData.baseEntryId, userId }, select: { id: true } }))) {
+    throw new Error("INVALID_TIMETABLE_ENTRY");
+  }
+  await prisma.timetableChange.updateMany({ where: { id, userId }, data: changeData });
+  revalidatePath("/app/timetable");
+  revalidatePath("/app");
+}
+
+export async function deleteTimetableChange(formData: FormData) {
+  const userId = await requireUserId();
+  const id = z.string().cuid().parse(String(formData.get("id") ?? ""));
+  await prisma.timetableChange.deleteMany({ where: { id, userId } });
+  revalidatePath("/app/timetable");
+  revalidatePath("/app");
 }
 
 export async function updateTimetableEntry(formData: FormData) {
@@ -159,6 +228,38 @@ export async function createTask(formData: FormData) {
   const subjectId = await ensureOwnedSubject(userId, data.subjectId);
   await prisma.task.create({ data: { ...data, status: data.status === "COMPLETED" ? "PENDING" : data.status, subjectId, userId } });
   revalidatePath("/app");
+  revalidatePath("/app/tasks");
+}
+
+export async function updateTask(formData: FormData) {
+  const userId = await requireUserId();
+  const id = z.string().cuid().parse(String(formData.get("id") ?? ""));
+  const existing = await prisma.task.findFirst({ where: { id, userId } });
+  if (!existing) return;
+  const data = taskSchema.parse(formObject(formData));
+  const schedule = canRescheduleTask(existing, data.dueDate, new Date());
+  if (!schedule.allowed) {
+    redirect(`/app/tasks?error=${schedule.reason === "OVERDUE_FIXED_DEADLINE" ? "overdue-fixed-deadline" : "fixed-deadline-date"}`);
+  }
+  if (existing.status === "COMPLETED" && data.status !== "COMPLETED") redirect("/app/tasks?error=completed-task");
+  const subjectId = await ensureOwnedSubject(userId, data.subjectId);
+  const completedAt = existing.completedAt ?? (data.status === "COMPLETED" ? new Date() : null);
+  const newlyCompleted = existing.status !== "COMPLETED" && data.status === "COMPLETED";
+  if (newlyCompleted) {
+    const reward = taskCompletionReward();
+    await withSerializableRetry(() => prisma.$transaction(async (tx) => {
+      const updated = await tx.task.updateMany({ where: { id, userId, status: { not: "COMPLETED" } }, data: { ...data, subjectId, completedAt } });
+      if (updated.count !== 1) return;
+      await tx.user.update({ where: { id: userId }, data: { xp: { increment: reward.xp }, coins: { increment: reward.coins } } });
+      await applyAcademicPetProgress(tx, userId, reward.xp);
+    }, { isolationLevel: "Serializable" }));
+    await refreshDailyMissionsForUser(userId);
+  } else {
+    await prisma.task.updateMany({ where: { id, userId }, data: { ...data, subjectId, completedAt } });
+  }
+  revalidatePath("/app");
+  revalidatePath("/app/tasks");
+  if (subjectId) revalidatePath(`/app/subjects/${subjectId}`);
 }
 
 export async function completeTask(formData: FormData) {
@@ -183,6 +284,7 @@ export async function deleteTask(formData: FormData) {
   const userId = await requireUserId();
   await prisma.task.deleteMany({ where: { id: String(formData.get("id") ?? ""), userId } });
   revalidatePath("/app");
+  revalidatePath("/app/tasks");
 }
 
 export async function createBoss(formData: FormData) {
@@ -193,10 +295,22 @@ export async function createBoss(formData: FormData) {
   revalidatePath("/app/bosses");
 }
 
+export async function updateBoss(formData: FormData) {
+  const userId = await requireUserId();
+  const id = z.string().cuid().parse(String(formData.get("id") ?? ""));
+  const data = bossSchema.parse(formObject(formData));
+  await ensureOwnedSubject(userId, data.subjectId);
+  await prisma.boss.updateMany({ where: { id, userId }, data });
+  revalidatePath("/app");
+  revalidatePath("/app/bosses");
+  revalidatePath(`/app/subjects/${data.subjectId}`);
+}
+
 export async function deleteBoss(formData: FormData) {
   const userId = await requireUserId();
   await prisma.boss.deleteMany({ where: { id: String(formData.get("id") ?? ""), userId } });
   revalidatePath("/app");
+  revalidatePath("/app/bosses");
 }
 
 export async function createGrade(formData: FormData) {
@@ -205,6 +319,16 @@ export async function createGrade(formData: FormData) {
   await ensureOwnedSubject(userId, data.subjectId);
   await prisma.grade.create({ data: { ...data, userId } });
   revalidatePath("/app/grades");
+}
+
+export async function updateGrade(formData: FormData) {
+  const userId = await requireUserId();
+  const id = z.string().cuid().parse(String(formData.get("id") ?? ""));
+  const data = gradeSchema.parse(formObject(formData));
+  await ensureOwnedSubject(userId, data.subjectId);
+  await prisma.grade.updateMany({ where: { id, userId }, data });
+  revalidatePath("/app/grades");
+  revalidatePath(`/app/subjects/${data.subjectId}`);
 }
 
 export async function deleteGrade(formData: FormData) {
@@ -217,6 +341,14 @@ export async function createGoal(formData: FormData) {
   const userId = await requireUserId();
   const data = goalSchema.parse(formObject(formData));
   await prisma.goal.create({ data: { ...data, isComplete: data.progress === 100, userId } });
+  revalidatePath("/app/goals");
+}
+
+export async function updateGoalDetails(formData: FormData) {
+  const userId = await requireUserId();
+  const id = z.string().cuid().parse(String(formData.get("id") ?? ""));
+  const data = goalSchema.parse(formObject(formData));
+  await prisma.goal.updateMany({ where: { id, userId }, data: { ...data, isComplete: data.progress === 100 } });
   revalidatePath("/app/goals");
 }
 

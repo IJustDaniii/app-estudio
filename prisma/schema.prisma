@@ -24,6 +24,17 @@ enum TaskStatus {
   COMPLETED
 }
 
+enum BossStatus {
+  UPCOMING
+  PREPARED
+  COMPLETED
+}
+
+enum GoalCategory {
+  ACADEMIC
+  PERSONAL
+}
+
 enum MissionMetric {
   STUDY_MINUTES
   TASKS_COMPLETED
@@ -114,6 +125,7 @@ model User {
   updatedAt         DateTime           @updatedAt
   subjects          Subject[]
   timetable         TimetableEntry[]
+  timetableChanges  TimetableChange[]
   tasks             Task[]
   bosses            Boss[]
   grades            Grade[]
@@ -234,37 +246,64 @@ model AIAuditLog {
 }
 
 model Subject {
-  id            String           @id @default(cuid())
-  name          String
-  color         String           @default("slate")
-  userId        String
-  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  timetable     TimetableEntry[]
-  tasks         Task[]
-  bosses        Boss[]
-  grades        Grade[]
-  studySessions StudySession[]
-  topics        Topic[]
-  materials     Material[]
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  id               String            @id @default(cuid())
+  name             String
+  color            String            @default("slate")
+  icon             String            @default("book-open")
+  teacher          String?
+  room             String?
+  difficulty       Int               @default(3)
+  notes            String?
+  userId           String
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  timetable        TimetableEntry[]
+  tasks            Task[]
+  bosses           Boss[]
+  grades           Grade[]
+  studySessions    StudySession[]
+  topics           Topic[]
+  materials        Material[]
+  timetableChanges TimetableChange[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
   @@unique([userId, name])
   @@index([userId])
 }
 
 model TimetableEntry {
-  id        String  @id @default(cuid())
+  id        String            @id @default(cuid())
   dayOfWeek Int
   startTime String
   endTime   String
   room      String?
   subjectId String
-  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  subject   Subject           @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   userId    String
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  changes   TimetableChange[]
 
   @@index([userId, dayOfWeek])
+}
+
+model TimetableChange {
+  id          String          @id @default(cuid())
+  date        DateTime        @db.Date
+  startTime   String
+  endTime     String
+  room        String?
+  isCancelled Boolean         @default(false)
+  baseEntryId String?
+  baseEntry   TimetableEntry? @relation(fields: [baseEntryId], references: [id], onDelete: SetNull)
+  subjectId   String
+  subject     Subject         @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([userId, date])
+  @@index([userId, baseEntryId])
 }
 
 model Task {
@@ -301,6 +340,7 @@ model Boss {
   targetGrade   Float?
   expectedGrade Float?
   actualGrade   Float?
+  status        BossStatus @default(UPCOMING)
   subjectId     String
   subject       Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   userId        String
@@ -316,6 +356,7 @@ model Grade {
   id        String   @id @default(cuid())
   label     String
   value     Float
+  weight    Float    @default(1)
   date      DateTime @default(now())
   subjectId String
   subject   Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
@@ -327,15 +368,16 @@ model Grade {
 }
 
 model Goal {
-  id         String    @id @default(cuid())
+  id         String       @id @default(cuid())
   title      String
+  category   GoalCategory @default(ACADEMIC)
   targetDate DateTime?
-  progress   Int       @default(0)
-  isComplete Boolean   @default(false)
+  progress   Int          @default(0)
+  isComplete Boolean      @default(false)
   userId     String
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
 
   @@index([userId, isComplete])
 }

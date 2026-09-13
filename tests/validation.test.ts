@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { goalProgressSchema, registerSchema, studySessionSchema, taskSchema } from "@/lib/validation";
+import { bossSchema, goalProgressSchema, goalSchema, gradeSchema, registerSchema, subjectSchema, studySessionSchema, taskSchema, timetableChangeSchema } from "@/lib/validation";
 
 describe("validación de cuenta", () => {
   it("exige una contraseña suficientemente robusta", () => {
@@ -13,6 +13,36 @@ describe("validación de cuenta", () => {
         password: "Segura-123",
       }).success,
     ).toBe(true);
+  });
+});
+
+describe("validación del núcleo académico", () => {
+  const subjectId = "cm12345678901234567890123";
+
+  it("acepta los datos completos de una asignatura", () => {
+    expect(subjectSchema.safeParse({
+      name: "Historia",
+      color: "amber",
+      icon: "landmark",
+      teacher: "Ana Ruiz",
+      room: "Aula 2",
+      difficulty: "4",
+      notes: "Preparar comentario de texto",
+    }).success).toBe(true);
+  });
+
+  it("exige un peso positivo en cada nota", () => {
+    expect(gradeSchema.safeParse({ label: "Control", subjectId, value: "7.5", weight: "0", date: "2026-09-13" }).success).toBe(false);
+    expect(gradeSchema.safeParse({ label: "Control", subjectId, value: "7.5", weight: "2", date: "2026-09-13" }).success).toBe(true);
+  });
+
+  it("clasifica los objetivos y conserva el estado del Boss", () => {
+    expect(goalSchema.safeParse({ title: "Leer una novela", category: "PERSONAL", targetDate: "", progress: "0" }).success).toBe(true);
+    expect(bossSchema.safeParse({ title: "Examen", subjectId, date: "2026-10-01T09:00", topics: "Tema 1", difficulty: "3", preparation: "50", status: "PREPARED", targetGrade: "8", expectedGrade: "7", actualGrade: "" }).success).toBe(true);
+  });
+
+  it("valida un cambio puntual de horario", () => {
+    expect(timetableChangeSchema.safeParse({ baseEntryId: subjectId, subjectId, date: "2026-09-15", startTime: "09:00", endTime: "10:00", room: "Aula 4", isCancelled: "false" }).success).toBe(true);
   });
 });
 

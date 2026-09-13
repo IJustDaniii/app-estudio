@@ -4,6 +4,7 @@ import { MAX_STUDY_SESSION_MINUTES, MIN_STUDY_SESSION_MINUTES } from "@/lib/doma
 const emptyToNullDate = z.preprocess((value) => (value === "" ? null : value), z.coerce.date().nullable());
 const optionalId = z.preprocess((value) => (value === "" ? null : value), z.string().cuid().nullable());
 const requiredText = (max: number) => z.string().trim().min(1).max(max);
+const optionalText = (max: number) => z.string().trim().max(max).optional().transform((value) => value || null);
 const formBoolean = z.preprocess((value) => value === true || value === "true" || value === "on", z.boolean());
 
 export const credentialsSchema = z.object({
@@ -25,6 +26,11 @@ export const registerSchema = credentialsSchema.extend({
 export const subjectSchema = z.object({
   name: requiredText(80),
   color: z.enum(["slate", "blue", "green", "amber", "rose", "violet", "cyan", "orange"]),
+  icon: z.enum(["book-open", "calculator", "flask-conical", "globe-2", "languages", "landmark", "palette", "dumbbell", "music", "laptop"]).default("book-open"),
+  teacher: optionalText(80),
+  room: optionalText(40),
+  difficulty: z.coerce.number().int().min(1).max(5).default(3),
+  notes: optionalText(2_000),
 });
 
 export const topicSchema = z.object({
@@ -62,6 +68,19 @@ export const timetableSchema = z
   })
   .refine((data) => data.endTime > data.startTime, { message: "La hora de fin debe ser posterior" });
 
+export const timetableChangeSchema = z
+  .object({
+    id: z.string().cuid().optional(),
+    baseEntryId: optionalId,
+    subjectId: z.string().cuid(),
+    date: z.coerce.date(),
+    startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+    endTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+    room: optionalText(40),
+    isCancelled: formBoolean.default(false),
+  })
+  .refine((data) => data.endTime > data.startTime, { message: "La hora de fin debe ser posterior" });
+
 export const taskSchema = z
   .object({
     title: requiredText(160),
@@ -90,17 +109,20 @@ export const bossSchema = z.object({
   targetGrade: z.preprocess((value) => (value === "" ? null : value), z.coerce.number().min(0).max(10).nullable()),
   expectedGrade: z.preprocess((value) => (value === "" ? null : value), z.coerce.number().min(0).max(10).nullable()),
   actualGrade: z.preprocess((value) => (value === "" ? null : value), z.coerce.number().min(0).max(10).nullable()),
+  status: z.enum(["UPCOMING", "PREPARED", "COMPLETED"]).default("UPCOMING"),
 });
 
 export const gradeSchema = z.object({
   label: requiredText(100),
   subjectId: z.string().cuid(),
   value: z.coerce.number().min(0).max(10),
+  weight: z.coerce.number().min(0.01).max(100),
   date: z.coerce.date(),
 });
 
 export const goalSchema = z.object({
   title: requiredText(160),
+  category: z.enum(["ACADEMIC", "PERSONAL"]).default("ACADEMIC"),
   targetDate: emptyToNullDate,
   progress: z.coerce.number().int().min(0).max(100),
 });
