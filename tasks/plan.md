@@ -37,3 +37,10 @@ Añadir chat de IA local mediante Ollama sin acoplar el resto de la aplicación 
 ## Fuera de alcance
 
 Embeddings, búsqueda semántica, RAG, flashcards, repetición espaciada, tests automáticos, análisis de exámenes, Teams y cualquier escritura automática o destructiva sobre datos académicos.
+
+## Extensión: contexto adaptativo y privacidad por categoría
+
+- `AcademicContextPolicy` decide la intención de una pregunta y las categorías mínimas necesarias sin depender de Ollama ni de otro proveedor.
+- Las consultas se ejecutan en `AcademicContextRepository`, que aplica siempre `userId`, permisos, límites de filas y selección de campos. Las herramientas reciben el mismo alcance y nunca Prisma.
+- Las categorías de configuración son notas; planificación (tareas, Bosses y objetivos); sesiones/estadísticas; horario/calendario; materiales; y gamificación (XP, nivel, monedas, misiones y racha). Asignaturas y temas forman la base académica no sensible.
+- Cada respuesta guarda un resumen serializable del modo, intención, categorías usadas, elementos incluidos/omitidos y avisos. La UI lo muestra de forma compacta.

@@ -19,7 +19,9 @@ Fuera de alcance: mascotas, tienda avanzada, cofres, rangos competitivos, tempor
 ### IA local inicial
 
 - Chat persistente por usuario con Ollama en el backend, streaming, ajustes de URL/modelo y estado recuperable cuando el proveedor no está disponible.
-- Constructor de contexto académico explícito y limitado; no se envía la base de datos completa automáticamente.
+- Capa central de contexto académico desacoplada de `AIProvider`, con selección compacta por intención y límites configurables; no se envía la base de datos completa automáticamente.
+- Controles por usuario para activar la IA, activar el contexto, permitir por separado notas, planificación (tareas/Bosses/objetivos), sesiones/estadísticas, horario/calendario, materiales y gamificación. Cada mensaje puede enviarse sin contexto personal.
+- El asistente sólo recibe lecturas del usuario autenticado, mediante contexto estructurado o herramientas de lectura acotadas. Las futuras escrituras quedan representadas como propuestas que exigirán confirmación, pero no se ejecutan en esta versión.
 - Extracción segura de texto de PDF/DOCX/PPTX, adjuntos de imagen para modelos con visión y selección de materiales existentes.
 - Herramientas iniciales de solo lectura y propuestas futuras de escritura que requieren confirmación.
 
