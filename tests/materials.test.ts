@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { materialDuplicateWhere, materialOwnershipWhere } from "@/lib/materials/queries";
+import { materialListArgs } from "@/lib/materials/listing";
+import { contentLengthExceedsMaterialBodyLimit, getMaterialRequestBodyLimit, limitMaterialRequestBody, MaterialBodyTooLargeError } from "@/lib/materials/body-limit";
 import { resolveMaterialSubjectId } from "@/lib/materials/references";
 import { materialResponseHeaders } from "@/lib/materials/preview";
 import { appendMaterialFiles } from "@/lib/materials/upload";
@@ -33,6 +35,25 @@ describe("almacenamiento local de materiales", () => {
 });
 
 describe("subida y validación de materiales", () => {
+  it("rechaza cuerpos HTTP grandes antes de completar el parsing multipart", async () => {
+    const request = new Request("http://localhost/api/materials", {
+      method: "POST",
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(new Uint8Array([1, 2, 3]));
+          controller.enqueue(new Uint8Array([4, 5, 6]));
+          controller.close();
+        },
+      }),
+      duplex: "half",
+    } as RequestInit);
+    expect(contentLengthExceedsMaterialBodyLimit("11", 10)).toBe(true);
+    expect(contentLengthExceedsMaterialBodyLimit(null, 10)).toBe(false);
+    expect(getMaterialRequestBodyLimit({ maxFiles: 20, maxBatchSize: 200 })).toBe(200 + 2 * 1024 * 1024);
+    await expect(limitMaterialRequestBody(request, 4).arrayBuffer()).rejects.toMatchObject({ code: "MATERIAL_BODY_TOO_LARGE" });
+    expect(new MaterialBodyTooLargeError().code).toBe("MATERIAL_BODY_TOO_LARGE");
+  });
+
   it("usa la misma lista para selector y drag & drop sin duplicar FormData", () => {
     const first = new File(["%PDF-1.7"], "uno.pdf", { type: "application/pdf" });
     const second = new File(["%PDF-1.7"], "dos.pdf", { type: "application/pdf" });
@@ -56,6 +77,14 @@ describe("subida y validación de materiales", () => {
 });
 
 describe("aislamiento de materiales", () => {
+  it("aplica filtros y ordenación antes de la ventana paginada", () => {
+    const args = materialListArgs({ userId: "user-1", subjectId: "subject-1", filterSubjectId: "subject-1", query: "  álgebra  ".trim(), type: "EXAM", favorites: true, sort: "name", page: 3 });
+    expect(args.where).toEqual({ userId: "user-1", AND: [{ subjectId: "subject-1" }, { subjectId: "subject-1" }, { name: { contains: "álgebra", mode: "insensitive" } }, { type: "EXAM" }, { isFavorite: true }] });
+    expect(args.orderBy).toEqual([{ name: "asc" }, { id: "asc" }]);
+    expect(args.skip).toBe(100);
+    expect(args.take).toBe(51);
+  });
+
   it("siempre incluye userId al buscar un material o un duplicado", () => {
     expect(materialOwnershipWhere("material-1", "user-1")).toEqual({ id: "material-1", userId: "user-1" });
     expect(materialDuplicateWhere("user-1", "a".repeat(64))).toEqual({ userId: "user-1", sha256: "a".repeat(64) });

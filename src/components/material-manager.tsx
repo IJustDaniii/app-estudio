@@ -20,9 +20,11 @@ type MaterialItem = {
 };
 
 type UploadLimits = { maxFiles: number; maxBatchSize: number };
-type Props = { materials: MaterialItem[]; subjects: Option[]; topics: Option[]; tasks: Option[]; bosses: Option[]; initialMetadata?: typeof emptyMetadata; page?: number; hasNext?: boolean; context?: { subjectId: string | null; taskId: string | null; bossId: string | null }; uploadLimits?: UploadLimits };
+type MaterialFilters = { query: string; subjectId: string; type: MaterialTypeValue | ""; favorites: boolean; sort: "date" | "name" | "size" };
+type Props = { materials: MaterialItem[]; subjects: Option[]; topics: Option[]; tasks: Option[]; bosses: Option[]; initialMetadata?: typeof emptyMetadata; page?: number; hasNext?: boolean; context?: { subjectId: string | null; taskId: string | null; bossId: string | null }; filters?: MaterialFilters; uploadLimits?: UploadLimits };
 
 const emptyMetadata: { subjectId: string; topicId: string; taskId: string; bossId: string; type: MaterialTypeValue; isFavorite: boolean; isCompletedExam: boolean } = { subjectId: "", topicId: "", taskId: "", bossId: "", type: "OTHER", isFavorite: false, isCompletedExam: false };
+const emptyFilters: MaterialFilters = { query: "", subjectId: "", type: "", favorites: false, sort: "date" };
 
 function bytes(size: number) {
   return size < 1024 * 1024 ? `${Math.max(1, Math.round(size / 1024))} KB` : `${(size / 1024 / 1024).toFixed(1)} MB`;
@@ -48,15 +50,41 @@ function MaterialFields({ subjects, topics, tasks, bosses, values = emptyMetadat
   </div>;
 }
 
-export function MaterialManager({ materials, subjects, topics, tasks, bosses, initialMetadata = emptyMetadata, page = 1, hasNext = false, context = { subjectId: null, taskId: null, bossId: null }, uploadLimits = { maxFiles: DEFAULT_MAX_MATERIAL_FILES, maxBatchSize: DEFAULT_MAX_MATERIAL_BATCH_SIZE } }: Props) {
+export function MaterialManager({ materials, subjects, topics, tasks, bosses, initialMetadata = emptyMetadata, page = 1, hasNext = false, context = { subjectId: null, taskId: null, bossId: null }, filters = emptyFilters, uploadLimits = { maxFiles: DEFAULT_MAX_MATERIAL_FILES, maxBatchSize: DEFAULT_MAX_MATERIAL_BATCH_SIZE } }: Props) {
   const router = useRouter();
   const [files, setFiles] = useState<File[]>([]);
   const [message, setMessage] = useState("");
-  const [query, setQuery] = useState("");
-  const [subjectFilter, setSubjectFilter] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
-  const [favorites, setFavorites] = useState(false);
-  const [sort, setSort] = useState("date");
+  const [query, setQuery] = useState(filters.query);
+  const [subjectFilter, setSubjectFilter] = useState(filters.subjectId);
+  const [typeFilter, setTypeFilter] = useState(filters.type);
+  const [favorites, setFavorites] = useState(filters.favorites);
+  const [sort, setSort] = useState(filters.sort);
+
+  function navigateWithFilters(changes: Partial<MaterialFilters>) {
+    const values = { query, subjectId: subjectFilter, type: typeFilter, favorites, sort, ...changes };
+    const params = new URLSearchParams(window.location.search);
+    if (values.query) params.set("q", values.query); else params.delete("q");
+    if (values.subjectId) params.set("filterSubjectId", values.subjectId); else params.delete("filterSubjectId");
+    if (values.type) params.set("filterType", values.type); else params.delete("filterType");
+    if (values.favorites) params.set("favorites", "1"); else params.delete("favorites");
+    if (values.sort !== "date") params.set("sort", values.sort); else params.delete("sort");
+    params.delete("page");
+    router.push(`/app/materials?${params.toString()}`, { scroll: false });
+  }
+
+  function paginationHref(nextPage: number) {
+    const params = new URLSearchParams();
+    if (context.subjectId) params.set("subjectId", context.subjectId);
+    if (context.taskId) params.set("taskId", context.taskId);
+    if (context.bossId) params.set("bossId", context.bossId);
+    if (query) params.set("q", query);
+    if (subjectFilter) params.set("filterSubjectId", subjectFilter);
+    if (typeFilter) params.set("filterType", typeFilter);
+    if (favorites) params.set("favorites", "1");
+    if (sort !== "date") params.set("sort", sort);
+    params.set("page", String(nextPage));
+    return `/app/materials?${params.toString()}`;
+  }
 
   const visibleMaterials = useMemo(() => materials.filter((material) => {
     return material.name.toLocaleLowerCase().includes(query.toLocaleLowerCase())
@@ -116,7 +144,7 @@ export function MaterialManager({ materials, subjects, topics, tasks, bosses, in
       <div className="mt-4 flex items-center gap-3"><Button type="submit">Subir materiales</Button>{message && <p role="status" className="text-sm text-muted-foreground">{message}</p>}</div>
     </form>
 
-    <div className="grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-2 lg:grid-cols-5"><div><Label htmlFor="material-search">Buscar</Label><Input id="material-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Nombre" /></div><div><Label htmlFor="filter-subject">Asignatura</Label><Select id="filter-subject" value={subjectFilter} onChange={(event) => setSubjectFilter(event.target.value)}><option value="">Todas</option>{subjects.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</Select></div><div><Label htmlFor="filter-type">Tipo</Label><Select id="filter-type" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}><option value="">Todos</option>{MATERIAL_TYPES.map((type) => <option key={type} value={type}>{MATERIAL_TYPE_LABELS[type]}</option>)}</Select></div><div><Label htmlFor="material-sort">Ordenar</Label><Select id="material-sort" value={sort} onChange={(event) => setSort(event.target.value)}><option value="date">Fecha</option><option value="name">Nombre</option><option value="size">Tamaño</option></Select></div><Label className="flex items-end gap-2 pb-2 text-sm"><input type="checkbox" checked={favorites} onChange={(event) => setFavorites(event.target.checked)} /> Solo favoritos</Label></div>
+    <div className="grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-2 lg:grid-cols-5"><div><Label htmlFor="material-search">Buscar</Label><Input id="material-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); navigateWithFilters({ query }); } }} onBlur={() => navigateWithFilters({ query })} placeholder="Nombre" /></div><div><Label htmlFor="filter-subject">Asignatura</Label><Select id="filter-subject" value={subjectFilter} onChange={(event) => { const value = event.target.value; setSubjectFilter(value); navigateWithFilters({ subjectId: value }); }}><option value="">Todas</option>{subjects.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</Select></div><div><Label htmlFor="filter-type">Tipo</Label><Select id="filter-type" value={typeFilter} onChange={(event) => { const value = event.target.value as MaterialTypeValue | ""; setTypeFilter(value); navigateWithFilters({ type: value }); }}><option value="">Todos</option>{MATERIAL_TYPES.map((type) => <option key={type} value={type}>{MATERIAL_TYPE_LABELS[type]}</option>)}</Select></div><div><Label htmlFor="material-sort">Ordenar</Label><Select id="material-sort" value={sort} onChange={(event) => { const value = event.target.value as MaterialFilters["sort"]; setSort(value); navigateWithFilters({ sort: value }); }}><option value="date">Fecha</option><option value="name">Nombre</option><option value="size">Tamaño</option></Select></div><Label className="flex items-end gap-2 pb-2 text-sm"><input type="checkbox" checked={favorites} onChange={(event) => { const value = event.target.checked; setFavorites(value); navigateWithFilters({ favorites: value }); }} /> Solo favoritos</Label></div>
 
     {visibleMaterials.length ? <ul className="space-y-3">{visibleMaterials.map((material) => {
       const values = { subjectId: material.subjectId ?? "", topicId: material.topicId ?? "", taskId: material.taskId ?? "", bossId: material.bossId ?? "", type: material.type, isFavorite: material.isFavorite, isCompletedExam: material.isCompletedExam };
@@ -126,6 +154,6 @@ export function MaterialManager({ materials, subjects, topics, tasks, bosses, in
         <details className="mt-3"><summary className="inline-flex cursor-pointer items-center gap-2 text-sm text-primary"><Pencil className="size-3.5" /> Editar</summary><form onSubmit={(event) => submitEdit(event, material.id)} className="mt-3 space-y-3"><div><Label htmlFor={`material-name-${material.id}`}>Nombre</Label><Input id={`material-name-${material.id}`} name="name" defaultValue={material.name} maxLength={160} required /></div><div><Label htmlFor={`material-description-${material.id}`}>Descripción</Label><Textarea id={`material-description-${material.id}`} name="description" defaultValue={material.description ?? ""} maxLength={2000} /></div><MaterialFields subjects={subjects} topics={topics} tasks={tasks} bosses={bosses} values={values} prefix={material.id} /><Button type="submit">Guardar cambios</Button></form></details>
       </li>;
     })}</ul> : <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">No hay materiales que coincidan con los filtros.</p>}
-    {(page > 1 || hasNext) && <nav className="flex items-center justify-between" aria-label="Paginación de materiales"><a className={page > 1 ? "text-sm text-primary hover:underline" : "pointer-events-none text-sm text-muted-foreground"} href={page > 1 ? `/app/materials?${new URLSearchParams({ ...(context.subjectId ? { subjectId: context.subjectId } : {}), ...(context.taskId ? { taskId: context.taskId } : {}), ...(context.bossId ? { bossId: context.bossId } : {}), page: String(page - 1) })}` : undefined}>Anterior</a><span className="text-xs text-muted-foreground">Página {page}</span><a className={hasNext ? "text-sm text-primary hover:underline" : "pointer-events-none text-sm text-muted-foreground"} href={hasNext ? `/app/materials?${new URLSearchParams({ ...(context.subjectId ? { subjectId: context.subjectId } : {}), ...(context.taskId ? { taskId: context.taskId } : {}), ...(context.bossId ? { bossId: context.bossId } : {}), page: String(page + 1) })}` : undefined}>Siguiente</a></nav>}
+    {(page > 1 || hasNext) && <nav className="flex items-center justify-between" aria-label="Paginación de materiales"><a className={page > 1 ? "text-sm text-primary hover:underline" : "pointer-events-none text-sm text-muted-foreground"} href={page > 1 ? paginationHref(page - 1) : undefined}>Anterior</a><span className="text-xs text-muted-foreground">Página {page}</span><a className={hasNext ? "text-sm text-primary hover:underline" : "pointer-events-none text-sm text-muted-foreground"} href={hasNext ? paginationHref(page + 1) : undefined}>Siguiente</a></nav>}
   </div>;
 }

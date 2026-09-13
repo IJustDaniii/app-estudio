@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { auth } from "@/auth";
+import { contentLengthExceedsMaterialBodyLimit, getMaterialRequestBodyLimit, isMaterialBodyTooLargeError, limitMaterialRequestBody } from "@/lib/materials/body-limit";
 import { getMaterialUploadLimits } from "@/lib/materials/constants";
 import { ensureOwnedMaterialReferences } from "@/lib/materials/references";
 import { materialDuplicateWhere } from "@/lib/materials/queries";
@@ -21,13 +22,19 @@ export async function POST(request: Request) {
   const userId = session?.user?.id;
   if (!userId) return unauthorized();
 
+  const uploadLimits = getMaterialUploadLimits();
+  const requestBodyLimit = getMaterialRequestBodyLimit(uploadLimits);
+  if (contentLengthExceedsMaterialBodyLimit(request.headers.get("content-length"), requestBodyLimit)) {
+    return Response.json({ error: "La petición supera el tamaño máximo permitido." }, { status: 413 });
+  }
+
   try {
-    const formData = await request.formData();
+    const formData = await limitMaterialRequestBody(request, requestBodyLimit).formData();
     const metadata = materialUploadMetadataSchema.parse(Object.fromEntries([...formData.entries()].filter(([, value]) => typeof value === "string")));
     const references = await ensureOwnedMaterialReferences(userId, metadata);
     const files = formData.getAll("files").filter((value): value is File => value instanceof File);
     try {
-      validateMaterialBatch(files, getMaterialUploadLimits());
+      validateMaterialBatch(files, uploadLimits);
     } catch (error) {
       const code = error instanceof Error ? error.message : "INVALID_BATCH";
       const message = code === "TOO_MANY_FILES" ? "El lote supera el número máximo de archivos." : code === "BATCH_TOO_LARGE" ? "El lote supera el tamaño total permitido." : "Selecciona al menos un archivo.";
@@ -89,6 +96,9 @@ export async function POST(request: Request) {
 
     return Response.json({ created, duplicates, failed }, { status: failed.length ? 207 : created.length ? 201 : 200 });
   } catch (error) {
+    if (isMaterialBodyTooLargeError(error)) {
+      return Response.json({ error: "La petición supera el tamaño máximo permitido." }, { status: 413 });
+    }
     if (error instanceof Error && ["INVALID_MATERIAL_REFERENCE", "TOPIC_SUBJECT_MISMATCH", "MATERIAL_SUBJECT_MISMATCH", "COMPLETED_EXAM_REQUIRES_BOSS"].includes(error.message)) {
       return Response.json({ error: "Los datos del material no son válidos" }, { status: 400 });
     }

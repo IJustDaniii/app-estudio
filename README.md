@@ -10,6 +10,8 @@ Cada usuario solo puede tener una copia de un contenido por SHA-256. Los lotes i
 
 La biblioteca muestra 50 materiales por página y limita a 100 las opciones de asignaturas, temas, tareas y Bosses cargadas en los selectores. Las respuestas de archivos son privadas y sin caché; solo una previsualización del mismo origen permite incrustar PDF o imágenes, mientras que el resto conserva la protección contra clickjacking.
 
+Antes de interpretar el multipart, el servidor rechaza por `Content-Length` o mediante un stream limitado cualquier cuerpo superior al lote configurado más 2 MB de sobrecarga multipart; el límite de archivos y bytes del lote se sigue validando por separado.
+
 `StorageProvider` es el punto de extensión para Cloudflare R2. La implementación actual es únicamente local; no se han añadido R2, OCR, embeddings ni ninguna función de IA.
 
 PWA de organización académica gamificada para 1.º de Bachillerato. Esta primera versión implementa el núcleo funcional solicitado sin IA, funciones sociales ni mecánicas avanzadas.
