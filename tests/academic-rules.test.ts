@@ -22,6 +22,10 @@ describe("reglas del nucleo academico", () => {
     });
   });
 
+  it("permite guardar otros campos de una obligación vencida manteniendo su minuto", () => {
+    expect(canRescheduleTask({ planningMode: "FIXED_DEADLINE", dueDate: new Date("2026-09-12T10:00:45.000Z") }, new Date("2026-09-12T10:00:00.000Z"), new Date("2026-09-13T10:00:00.000Z"))).toEqual({ allowed: true });
+  });
+
   it("permite cambiar la fecha del estudio flexible aunque ya haya pasado", () => {
     const task: ReschedulableTask = {
       planningMode: "FLEXIBLE_STUDY",

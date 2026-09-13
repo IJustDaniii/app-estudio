@@ -12,7 +12,8 @@ export function canRescheduleTask(task: ReschedulableTask, nextDueDate: Date | n
     return { allowed: false, reason: "FIXED_DEADLINE_NEEDS_DATE" };
   }
 
-  const isChangingDate = task.dueDate?.getTime() !== nextDueDate?.getTime();
+  const minute = (date: Date | null) => date === null ? null : Math.floor(date.getTime() / 60_000);
+  const isChangingDate = minute(task.dueDate) !== minute(nextDueDate);
   if (task.planningMode === "FIXED_DEADLINE" && task.dueDate && task.dueDate < now && isChangingDate) {
     return { allowed: false, reason: "OVERDUE_FIXED_DEADLINE" };
   }
