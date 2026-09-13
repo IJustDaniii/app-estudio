@@ -1,7 +1,10 @@
+import { Prisma } from "@prisma/client";
 import { auth } from "@/auth";
 import { ensureOwnedMaterialReferences } from "@/lib/materials/references";
 import { materialOwnershipWhere } from "@/lib/materials/queries";
+import { deleteMaterialWithCompensation } from "@/lib/materials/service";
 import { getStorageProvider } from "@/lib/materials/storage";
+import { materialResponseHeaders } from "@/lib/materials/preview";
 import { prisma } from "@/lib/prisma";
 import { materialIdSchema, materialMetadataSchema } from "@/lib/validation";
 
@@ -19,21 +22,16 @@ async function getOwnedMaterial(id: string) {
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
-  const { material } = await getOwnedMaterial(id);
+  const { userId, material } = await getOwnedMaterial(id);
+  if (!userId) return new Response("No autorizado", { status: 401 });
   if (!material) return new Response("No encontrado", { status: 404 });
 
   try {
     const content = await getStorageProvider().get(material.storageKey);
     const preview = new URL(request.url).searchParams.get("preview") === "1";
-    const disposition = preview ? "inline" : "attachment";
+    const headers = materialResponseHeaders({ mimeType: material.mimeType, size: material.size, originalName: material.originalName, preview });
     return new Response(new Uint8Array(content), {
-      headers: {
-        "Content-Type": material.mimeType,
-        "Content-Length": String(material.size),
-        "Content-Disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(material.originalName)}`,
-        "Cache-Control": "private, no-store",
-        "X-Content-Type-Options": "nosniff",
-      },
+      headers,
     });
   } catch {
     return new Response("No encontrado", { status: 404 });
@@ -60,11 +58,18 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
   const { id } = await context.params;
   const { userId, material } = await getOwnedMaterial(id);
   if (!userId) return Response.json({ error: "No autorizado" }, { status: 401 });
-  if (!material) return Response.json({ error: "No encontrado" }, { status: 404 });
+  if (!material) return Response.json({ ok: true });
 
   try {
-    await getStorageProvider().delete(material.storageKey);
-    await prisma.material.delete({ where: { id: material.id } });
+    await deleteMaterialWithCompensation(getStorageProvider(), material.storageKey, async () => {
+      try {
+        await prisma.material.delete({ where: { id: material.id } });
+      } catch (error) {
+        // Another idempotent DELETE may have removed the row between the ownership check and this call.
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") return;
+        throw error;
+      }
+    });
     return Response.json({ ok: true });
   } catch {
     return Response.json({ error: "No se pudo eliminar el material" }, { status: 500 });

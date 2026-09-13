@@ -8,12 +8,19 @@ type MaterialReferences = {
   isCompletedExam: boolean;
 };
 
+export function resolveMaterialSubjectId(explicitSubjectId: string | null, referencedSubjectIds: Array<string | null | undefined>) {
+  const derived = [...new Set(referencedSubjectIds.filter((value): value is string => Boolean(value)))];
+  if (derived.length > 1) throw new Error("MATERIAL_SUBJECT_MISMATCH");
+  if (explicitSubjectId && derived.length && explicitSubjectId !== derived[0]) throw new Error("MATERIAL_SUBJECT_MISMATCH");
+  return explicitSubjectId ?? derived[0] ?? null;
+}
+
 export async function ensureOwnedMaterialReferences(userId: string, values: MaterialReferences) {
   const [subject, topic, task, boss] = await Promise.all([
     values.subjectId ? prisma.subject.findFirst({ where: { id: values.subjectId, userId }, select: { id: true } }) : null,
     values.topicId ? prisma.topic.findFirst({ where: { id: values.topicId, userId }, select: { id: true, subjectId: true } }) : null,
-    values.taskId ? prisma.task.findFirst({ where: { id: values.taskId, userId }, select: { id: true } }) : null,
-    values.bossId ? prisma.boss.findFirst({ where: { id: values.bossId, userId }, select: { id: true } }) : null,
+    values.taskId ? prisma.task.findFirst({ where: { id: values.taskId, userId }, select: { id: true, subjectId: true } }) : null,
+    values.bossId ? prisma.boss.findFirst({ where: { id: values.bossId, userId }, select: { id: true, subjectId: true } }) : null,
   ]);
 
   if ((values.subjectId && !subject) || (values.topicId && !topic) || (values.taskId && !task) || (values.bossId && !boss)) {
@@ -22,5 +29,8 @@ export async function ensureOwnedMaterialReferences(userId: string, values: Mate
   if (topic && values.subjectId && topic.subjectId !== values.subjectId) throw new Error("TOPIC_SUBJECT_MISMATCH");
   if (values.isCompletedExam && !boss) throw new Error("COMPLETED_EXAM_REQUIRES_BOSS");
 
-  return { ...values, subjectId: values.subjectId ?? topic?.subjectId ?? null };
+  return {
+    ...values,
+    subjectId: resolveMaterialSubjectId(values.subjectId, [topic?.subjectId, task?.subjectId, boss?.subjectId]),
+  };
 }

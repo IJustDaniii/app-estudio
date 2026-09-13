@@ -20,6 +20,11 @@
   - Aceptación: CRUD básico persistente y separación fija/flexible.
   - Verificación: pruebas de dominio, tipos y revisión manual.
 
+## Fase 2 — Materiales/Archivos
+
+- [x] Implementar subida privada múltiple, validación de firma, SHA-256, asociaciones académicas, paginación y almacenamiento local fuera de `public/`.
+  - Verificación: límites por archivo/lote, duplicados, aislamiento, referencias cruzadas, limpieza compensatoria, tests, lint, tipos y build.
+
 ## Fase 3 — Estudio y progreso
 
 - [x] Implementar temporizador y sesiones.

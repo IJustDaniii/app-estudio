@@ -1,8 +1,10 @@
 "use client";
 
 import { ChangeEvent, DragEvent, FormEvent, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Download, FileText, Heart, ImageIcon, Pencil, Star, Trash2, Upload } from "lucide-react";
-import { MATERIAL_TYPE_LABELS, MATERIAL_TYPES, isPreviewableMimeType, type MaterialTypeValue } from "@/lib/materials/constants";
+import { DEFAULT_MAX_MATERIAL_BATCH_SIZE, DEFAULT_MAX_MATERIAL_FILES, MATERIAL_TYPE_LABELS, MATERIAL_TYPES, isPreviewableMimeType, type MaterialTypeValue } from "@/lib/materials/constants";
+import { appendMaterialFiles } from "@/lib/materials/upload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,7 +19,8 @@ type MaterialItem = {
   task: { title: string } | null; boss: { title: string } | null;
 };
 
-type Props = { materials: MaterialItem[]; subjects: Option[]; topics: Option[]; tasks: Option[]; bosses: Option[]; initialMetadata?: typeof emptyMetadata };
+type UploadLimits = { maxFiles: number; maxBatchSize: number };
+type Props = { materials: MaterialItem[]; subjects: Option[]; topics: Option[]; tasks: Option[]; bosses: Option[]; initialMetadata?: typeof emptyMetadata; page?: number; hasNext?: boolean; context?: { subjectId: string | null; taskId: string | null; bossId: string | null }; uploadLimits?: UploadLimits };
 
 const emptyMetadata: { subjectId: string; topicId: string; taskId: string; bossId: string; type: MaterialTypeValue; isFavorite: boolean; isCompletedExam: boolean } = { subjectId: "", topicId: "", taskId: "", bossId: "", type: "OTHER", isFavorite: false, isCompletedExam: false };
 
@@ -30,17 +33,23 @@ function associationLabel(material: MaterialItem) {
 }
 
 function MaterialFields({ subjects, topics, tasks, bosses, values = emptyMetadata, prefix = "new" }: Omit<Props, "materials"> & { values?: typeof emptyMetadata; prefix?: string }) {
+  const [subjectId, setSubjectId] = useState(values.subjectId);
+  const [topicId, setTopicId] = useState(values.topicId);
+  const [taskId, setTaskId] = useState(values.taskId);
+  const [bossId, setBossId] = useState(values.bossId);
+  const scoped = (options: Option[]) => subjectId ? options.filter((item) => !item.subjectId || item.subjectId === subjectId) : options;
   return <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-    <div><Label htmlFor={`${prefix}-material-subject`}>Asignatura</Label><Select id={`${prefix}-material-subject`} name="subjectId" defaultValue={values.subjectId}><option value="">Sin asignatura</option>{subjects.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</Select></div>
-    <div><Label htmlFor={`${prefix}-material-topic`}>Tema / unidad</Label><Select id={`${prefix}-material-topic`} name="topicId" defaultValue={values.topicId}><option value="">Sin tema</option>{topics.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</Select></div>
+    <div><Label htmlFor={`${prefix}-material-subject`}>Asignatura</Label><Select id={`${prefix}-material-subject`} name="subjectId" value={subjectId} onChange={(event) => { setSubjectId(event.target.value); setTopicId(""); setTaskId(""); setBossId(""); }}><option value="">Sin asignatura</option>{subjects.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</Select></div>
+    <div><Label htmlFor={`${prefix}-material-topic`}>Tema / unidad</Label><Select id={`${prefix}-material-topic`} name="topicId" value={topicId} onChange={(event) => setTopicId(event.target.value)}><option value="">Sin tema</option>{scoped(topics).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</Select></div>
     <div><Label htmlFor={`${prefix}-material-type`}>Tipo</Label><Select id={`${prefix}-material-type`} name="type" defaultValue={values.type}>{MATERIAL_TYPES.map((type) => <option key={type} value={type}>{MATERIAL_TYPE_LABELS[type]}</option>)}</Select></div>
-    <div><Label htmlFor={`${prefix}-material-task`}>Tarea</Label><Select id={`${prefix}-material-task`} name="taskId" defaultValue={values.taskId}><option value="">Sin tarea</option>{tasks.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</Select></div>
-    <div><Label htmlFor={`${prefix}-material-boss`}>Boss</Label><Select id={`${prefix}-material-boss`} name="bossId" defaultValue={values.bossId}><option value="">Sin Boss</option>{bosses.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</Select></div>
+    <div><Label htmlFor={`${prefix}-material-task`}>Tarea</Label><Select id={`${prefix}-material-task`} name="taskId" value={taskId} onChange={(event) => setTaskId(event.target.value)}><option value="">Sin tarea</option>{scoped(tasks).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</Select></div>
+    <div><Label htmlFor={`${prefix}-material-boss`}>Boss</Label><Select id={`${prefix}-material-boss`} name="bossId" value={bossId} onChange={(event) => setBossId(event.target.value)}><option value="">Sin Boss</option>{scoped(bosses).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</Select></div>
     <div className="flex flex-wrap items-end gap-4 pb-1 text-sm"><Label className="flex items-center gap-2"><input name="isFavorite" type="checkbox" defaultChecked={values.isFavorite} /> Favorito</Label><Label className="flex items-center gap-2"><input name="isCompletedExam" type="checkbox" defaultChecked={values.isCompletedExam} /> Examen realizado</Label></div>
   </div>;
 }
 
-export function MaterialManager({ materials, subjects, topics, tasks, bosses, initialMetadata = emptyMetadata }: Props) {
+export function MaterialManager({ materials, subjects, topics, tasks, bosses, initialMetadata = emptyMetadata, page = 1, hasNext = false, context = { subjectId: null, taskId: null, bossId: null }, uploadLimits = { maxFiles: DEFAULT_MAX_MATERIAL_FILES, maxBatchSize: DEFAULT_MAX_MATERIAL_BATCH_SIZE } }: Props) {
+  const router = useRouter();
   const [files, setFiles] = useState<File[]>([]);
   const [message, setMessage] = useState("");
   const [query, setQuery] = useState("");
@@ -64,15 +73,17 @@ export function MaterialManager({ materials, subjects, topics, tasks, bosses, in
     event.preventDefault();
     if (!files.length) return setMessage("Selecciona uno o varios archivos.");
     const data = new FormData(event.currentTarget);
-    files.forEach((file) => data.append("files", file));
+    appendMaterialFiles(data, files);
     setMessage("Subiendo materiales…");
     const response = await fetch("/api/materials", { method: "POST", body: data });
     const result = await response.json();
-    if (!response.ok) return setMessage(result.error ?? "No se pudo subir el material.");
+    const failedNames = (result.failed ?? []).map((item: { name: string; error: string }) => `${item.name} (${item.error})`).join(", ");
+    if (!response.ok && response.status !== 207) return setMessage(`${result.error ?? "No se pudo subir el material."}${failedNames ? ` ${failedNames}` : ""}`);
     setFiles([]);
     event.currentTarget.reset();
-    setMessage(`${result.created.length} añadido(s)${result.duplicates.length ? ` · ${result.duplicates.join(", ")} ya existía(n)` : ""}.`);
-    window.location.reload();
+    const duplicateNames = (result.duplicates ?? []).map((item: { name: string }) => item.name).join(", ");
+    setMessage(`${result.created?.length ?? 0} creado(s)${duplicateNames ? ` · Duplicados: ${duplicateNames}` : ""}${failedNames ? ` · Fallidos: ${failedNames}` : ""}.`);
+    router.refresh();
   }
 
   async function update(id: string, values: Record<string, FormDataEntryValue | boolean>) {
@@ -97,8 +108,8 @@ export function MaterialManager({ materials, subjects, topics, tasks, bosses, in
   return <div className="space-y-6">
     <form onSubmit={upload} className="rounded-xl border bg-card p-4 sm:p-5">
       <div onDrop={(event: DragEvent<HTMLDivElement>) => { event.preventDefault(); addFiles(event.dataTransfer.files); }} onDragOver={(event) => event.preventDefault()} className="grid gap-3 rounded-lg border border-dashed bg-muted/40 p-6 text-center">
-        <Upload className="mx-auto size-6 text-muted-foreground" /><p className="text-sm font-medium">Arrastra aquí tus archivos</p><p className="text-xs text-muted-foreground">PDF, imágenes, Word o PowerPoint · máximo 50 MB por archivo</p>
-        <Label htmlFor="material-files" className="mx-auto cursor-pointer text-sm font-medium text-primary underline underline-offset-4">Elegir archivos</Label><Input id="material-files" className="sr-only" type="file" name="files" multiple accept="application/pdf,image/jpeg,image/png,image/gif,image/webp,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation" onChange={(event: ChangeEvent<HTMLInputElement>) => event.target.files && addFiles(event.target.files)} />
+        <Upload className="mx-auto size-6 text-muted-foreground" /><p className="text-sm font-medium">Arrastra aquí tus archivos</p><p className="text-xs text-muted-foreground">PDF, imágenes, Word o PowerPoint · máximo 50 MB por archivo · {uploadLimits.maxFiles} por lote · {uploadLimits.maxBatchSize / 1024 / 1024} MB por petición</p>
+        <Label htmlFor="material-files" className="mx-auto cursor-pointer text-sm font-medium text-primary underline underline-offset-4">Elegir archivos</Label><Input id="material-files" className="sr-only" type="file" multiple accept="application/pdf,image/jpeg,image/png,image/gif,image/webp,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation" onChange={(event: ChangeEvent<HTMLInputElement>) => event.target.files && addFiles(event.target.files)} />
         {files.length > 0 && <p className="text-xs text-muted-foreground">{files.map((file) => file.name).join(" · ")}</p>}
       </div>
       <div className="mt-4"><MaterialFields subjects={subjects} topics={topics} tasks={tasks} bosses={bosses} values={initialMetadata} /></div>
@@ -115,5 +126,6 @@ export function MaterialManager({ materials, subjects, topics, tasks, bosses, in
         <details className="mt-3"><summary className="inline-flex cursor-pointer items-center gap-2 text-sm text-primary"><Pencil className="size-3.5" /> Editar</summary><form onSubmit={(event) => submitEdit(event, material.id)} className="mt-3 space-y-3"><div><Label htmlFor={`material-name-${material.id}`}>Nombre</Label><Input id={`material-name-${material.id}`} name="name" defaultValue={material.name} maxLength={160} required /></div><div><Label htmlFor={`material-description-${material.id}`}>Descripción</Label><Textarea id={`material-description-${material.id}`} name="description" defaultValue={material.description ?? ""} maxLength={2000} /></div><MaterialFields subjects={subjects} topics={topics} tasks={tasks} bosses={bosses} values={values} prefix={material.id} /><Button type="submit">Guardar cambios</Button></form></details>
       </li>;
     })}</ul> : <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">No hay materiales que coincidan con los filtros.</p>}
+    {(page > 1 || hasNext) && <nav className="flex items-center justify-between" aria-label="Paginación de materiales"><a className={page > 1 ? "text-sm text-primary hover:underline" : "pointer-events-none text-sm text-muted-foreground"} href={page > 1 ? `/app/materials?${new URLSearchParams({ ...(context.subjectId ? { subjectId: context.subjectId } : {}), ...(context.taskId ? { taskId: context.taskId } : {}), ...(context.bossId ? { bossId: context.bossId } : {}), page: String(page - 1) })}` : undefined}>Anterior</a><span className="text-xs text-muted-foreground">Página {page}</span><a className={hasNext ? "text-sm text-primary hover:underline" : "pointer-events-none text-sm text-muted-foreground"} href={hasNext ? `/app/materials?${new URLSearchParams({ ...(context.subjectId ? { subjectId: context.subjectId } : {}), ...(context.taskId ? { taskId: context.taskId } : {}), ...(context.bossId ? { bossId: context.bossId } : {}), page: String(page + 1) })}` : undefined}>Siguiente</a></nav>}
   </div>;
 }

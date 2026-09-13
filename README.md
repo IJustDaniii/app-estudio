@@ -1,5 +1,17 @@
 # Aula 1B
 
+## Materiales y archivos académicos
+
+El módulo Materiales admite PDF, JPG/JPEG, PNG, GIF, WebP, DOC/DOCX y PPT/PPTX. Cada archivo está limitado a 50 MB; una petición puede contener como máximo 20 archivos y 200 MB en total (`MATERIALS_MAX_FILES` y `MATERIALS_MAX_BATCH_SIZE`). El servidor valida extensión, MIME declarado y firma/contenido básico antes de guardar.
+
+Los metadatos viven en PostgreSQL y los bytes se guardan localmente fuera de `public/`, por defecto en `storage/materials` (o en `MATERIALS_STORAGE_DIR`). Las claves almacenadas en la base de datos son abstractas y todas las operaciones comprueban el usuario autenticado. El almacenamiento local pertenece únicamente a la máquina que ejecuta el servidor: no se sincroniza automáticamente con otros dispositivos.
+
+Cada usuario solo puede tener una copia de un contenido por SHA-256. Los lotes informan por archivo de creaciones, duplicados y fallos; las escrituras limpian el archivo si falla la creación de metadatos y los borrados restauran el archivo si falla la eliminación de la fila (incluidos borrados repetidos). Si una compensación tampoco puede completarse, la API devuelve un fallo explícito para reconciliación operativa y no oculta el éxito parcial. Para copias de seguridad hay que respaldar PostgreSQL y `storage/materials` de forma coordinada; todavía no hay reconciliación automática.
+
+La biblioteca muestra 50 materiales por página y limita a 100 las opciones de asignaturas, temas, tareas y Bosses cargadas en los selectores. Las respuestas de archivos son privadas y sin caché; solo una previsualización del mismo origen permite incrustar PDF o imágenes, mientras que el resto conserva la protección contra clickjacking.
+
+`StorageProvider` es el punto de extensión para Cloudflare R2. La implementación actual es únicamente local; no se han añadido R2, OCR, embeddings ni ninguna función de IA.
+
 PWA de organización académica gamificada para 1.º de Bachillerato. Esta primera versión implementa el núcleo funcional solicitado sin IA, funciones sociales ni mecánicas avanzadas.
 
 ## Puesta en marcha

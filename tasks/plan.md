@@ -1,5 +1,9 @@
 # Plan de implementación
 
+## Fase 2 — Materiales/Archivos
+
+La primera parte de la Fase 2 incluye Materiales/Archivos privados, temas/unidades, validación de contenido y almacenamiento local. R2 e IA quedan como puntos de extensión futuros.
+
 ## Arquitectura
 
 - App Router con Server Components y Server Actions para reducir superficie de API.

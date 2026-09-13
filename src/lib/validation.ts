@@ -39,8 +39,8 @@ export const materialMetadataSchema = z.object({
   topicId: optionalId,
   taskId: optionalId,
   bossId: optionalId,
-  isFavorite: formBoolean,
-  isCompletedExam: formBoolean,
+  isFavorite: formBoolean.default(false),
+  isCompletedExam: formBoolean.default(false),
 });
 
 export const materialUploadMetadataSchema = materialMetadataSchema.omit({ name: true }).extend({
