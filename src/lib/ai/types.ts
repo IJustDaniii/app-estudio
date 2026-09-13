@@ -1,5 +1,19 @@
 export type AIMessageRole = "system" | "user" | "assistant" | "tool";
 
+export type AIContextCategory = "subjects" | "tasksAndBosses" | "grades" | "sessionsAndStatistics" | "schedule" | "materials" | "gamification";
+export type AIContextIntent = "today" | "subject" | "performance" | "schedule" | "gamification" | "general";
+export type AIContextSnapshotItem = { type: string; id: string; label: string };
+export type AIContextCategorySummary = { category: AIContextCategory; label: string; count: number };
+export type AIContextSnapshot = {
+  mode: "personal" | "none";
+  intent: AIContextIntent;
+  used: AIContextCategorySummary[];
+  blocked: Array<{ category: AIContextCategory; label: string }>;
+  included: AIContextSnapshotItem[];
+  omitted: AIContextSnapshotItem[];
+  warnings: string[];
+};
+
 export type AIMessageInput = {
   role: AIMessageRole;
   content: string;

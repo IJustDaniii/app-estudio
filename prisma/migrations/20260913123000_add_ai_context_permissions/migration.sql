@@ -1,0 +1,9 @@
+ALTER TABLE "AISettings"
+  ADD COLUMN "isAIEnabled" BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN "canReadGrades" BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN "canReadTasksAndBosses" BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN "canReadSessionsAndStatistics" BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN "canReadSchedule" BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN "canReadMaterials" BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN "canReadGamification" BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN "maxItemsPerCategory" INTEGER NOT NULL DEFAULT 20;

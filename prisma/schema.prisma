@@ -94,8 +94,16 @@ model AISettings {
   provider                 AIProviderKind @default(OLLAMA)
   ollamaUrl                String         @default("http://127.0.0.1:11434")
   model                    String         @default("qwen3.5:9b")
+  isAIEnabled              Boolean        @default(true)
   isAcademicContextEnabled Boolean        @default(true)
+  canReadGrades            Boolean        @default(true)
+  canReadTasksAndBosses    Boolean        @default(true)
+  canReadSessionsAndStatistics Boolean    @default(true)
+  canReadSchedule          Boolean        @default(true)
+  canReadMaterials         Boolean        @default(true)
+  canReadGamification      Boolean        @default(true)
   contextLimit             Int            @default(12000)
+  maxItemsPerCategory      Int            @default(20)
   createdAt                DateTime       @default(now())
   updatedAt                DateTime       @updatedAt
 }

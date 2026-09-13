@@ -2,24 +2,8 @@ import "server-only";
 import { requireUserId } from "@/auth";
 import { refreshDailyMissions } from "@/app/actions";
 import { dateOnlyForLocalDay, localDayBounds } from "@/lib/domain/dates";
+import { calculateStudyStreak } from "@/lib/domain/progress";
 import { prisma } from "@/lib/prisma";
-
-function dateKey(date: Date) {
-  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
-}
-
-function calculateStreak(dates: Date[], now = new Date()) {
-  const studied = new Set(dates.map(dateKey));
-  const cursor = new Date(now);
-  cursor.setHours(0, 0, 0, 0);
-  if (!studied.has(dateKey(cursor))) cursor.setDate(cursor.getDate() - 1);
-  let streak = 0;
-  while (studied.has(dateKey(cursor))) {
-    streak += 1;
-    cursor.setDate(cursor.getDate() - 1);
-  }
-  return streak;
-}
 
 export async function getDashboardData() {
   const userId = await requireUserId();
@@ -45,7 +29,7 @@ export async function getDashboardData() {
     todayStudyMinutes: todayStudy._sum.actualMinutes ?? 0,
     todayCompleted,
     missions,
-    streak: calculateStreak(sessionDates.map((session) => session.startedAt), now),
+    streak: calculateStudyStreak(sessionDates.map((session) => session.startedAt), now),
     now,
   };
 }

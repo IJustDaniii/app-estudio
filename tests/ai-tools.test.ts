@@ -8,9 +8,17 @@ describe("AI tools", () => {
   it("exposes only read-only academic tools in this phase", () => {
     expect(AI_TOOL_DEFINITIONS.map((tool) => tool.name)).toEqual([
       "consult_subjects",
+      "consult_topics",
       "consult_tasks",
       "consult_bosses",
+      "consult_goals",
       "consult_grades",
+      "consult_study_sessions",
+      "consult_statistics",
+      "consult_schedule",
+      "consult_calendar",
+      "consult_materials",
+      "consult_gamification",
     ]);
     expect(AI_TOOL_DEFINITIONS.every((tool) => tool.access === "read")).toBe(true);
   });
