@@ -28,6 +28,7 @@
 - `npm run build`: compilación de producción.
 - `npx prisma validate` y `npx prisma format --check`: correctos.
 - `npm audit --audit-level=high`: 0 vulnerabilidades conocidas.
+- Navegador: `/login` carga sin errores de consola, el icono responde y `/app/study` redirige correctamente sin autenticación.
 - Revisión final del diff, de los archivos añadidos y de los secretos antes del commit.
 
 ## Posibles limitaciones restantes
