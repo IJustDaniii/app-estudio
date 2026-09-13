@@ -1,7 +1,7 @@
 export type AIMessageRole = "system" | "user" | "assistant" | "tool";
 
 export type AIContextCategory = "subjects" | "tasksAndBosses" | "grades" | "sessionsAndStatistics" | "schedule" | "materials" | "gamification";
-export type AIContextIntent = "today" | "subject" | "performance" | "schedule" | "gamification" | "planning" | "sessions" | "materials" | "personal" | "general";
+export type AIContextIntent = "today" | "subject" | "performance" | "schedule" | "gamification" | "planning" | "sessions" | "materials" | "action" | "personal" | "general";
 export type AIContextSnapshotItem = { type: string; id: string; label: string };
 export type AIContextCategorySummary = { category: AIContextCategory; label: string; count: number };
 export type AIContextSnapshot = {
@@ -25,7 +25,7 @@ export type AIMessageInput = {
 export type AIToolDefinition = {
   name: string;
   description: string;
-  access: "read";
+  access: "read" | "propose";
   parameters: Record<string, unknown>;
 };
 

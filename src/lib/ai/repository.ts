@@ -8,10 +8,18 @@ import type { AIAcademicPermissions, ContextSelection } from "@/lib/ai/validatio
 import { aiModelSchema, DEFAULT_AI_CONTEXT_ITEM_LIMIT, DEFAULT_AI_CONTEXT_LIMIT, DEFAULT_AI_MODEL, DEFAULT_OLLAMA_URL, ollamaUrlSchema, defaultAIAcademicPermissions } from "@/lib/ai/validation";
 import { prisma } from "@/lib/prisma";
 import { academicTimeRangeForKind, resolveAcademicTimeRange } from "@/lib/ai/temporal";
+import { checkAIRateLimit } from "@/lib/ai/rate-limit";
+import { searchWeb, WebSearchError } from "@/lib/ai/web-search";
 
 function textFilter(query?: string): Prisma.StringFilter | undefined {
   const compact = query?.trim().slice(0, 120);
   return compact ? { contains: compact, mode: "insensitive" } : undefined;
+}
+
+function calendarTextFilter(query?: string): Prisma.StringFilter | undefined {
+  const terms = query?.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean).slice(0, 5) ?? [];
+  if (!terms.length) return undefined;
+  return textFilter(terms[0]);
 }
 
 function idWhere(ids: string[]) {
@@ -60,10 +68,11 @@ export const academicContextRepository: AcademicContextRepository = {
     return rows.map(({ subject, ...entry }) => ({ ...entry, subjectName: subject.name }));
   },
   async calendar(userId, options) {
+    const search = calendarTextFilter(options.query);
     const [tasks, bosses, goals] = await Promise.all([
-      prisma.task.findMany({ where: { userId, dueDate: dateWhere(options.from, options.to) }, select: { id: true, title: true, dueDate: true, subject: { select: { name: true } } }, take: options.limit }),
-      prisma.boss.findMany({ where: { userId, date: dateWhere(options.from, options.to) }, select: { id: true, title: true, date: true, subject: { select: { name: true } } }, take: options.limit }),
-      prisma.goal.findMany({ where: { userId, targetDate: dateWhere(options.from, options.to) }, select: { id: true, title: true, targetDate: true }, take: options.limit }),
+      prisma.task.findMany({ where: { userId, ...(search ? { title: search } : {}), dueDate: dateWhere(options.from, options.to) }, select: { id: true, title: true, dueDate: true, subject: { select: { name: true } } }, take: options.limit }),
+      prisma.boss.findMany({ where: { userId, ...(search ? { title: search } : {}), date: dateWhere(options.from, options.to) }, select: { id: true, title: true, date: true, subject: { select: { name: true } } }, take: options.limit }),
+      prisma.goal.findMany({ where: { userId, ...(search ? { title: search } : {}), targetDate: dateWhere(options.from, options.to) }, select: { id: true, title: true, targetDate: true }, take: options.limit }),
     ]);
     return [
       ...tasks.filter((item) => item.dueDate).map((item) => ({ id: item.id, type: "task" as const, title: item.title, date: item.dueDate!, subjectName: item.subject?.name })),
@@ -115,6 +124,16 @@ function toolLimit(limit: number, maxItemsPerCategory: number) {
   return Math.min(limit, maxItemsPerCategory);
 }
 
+async function safeWebSearch(userId: string, args: { query: string }) {
+  const rate = checkAIRateLimit(`web-search:${userId}`, 5, 60_000);
+  if (!rate.allowed) return { source: "internet" as const, query: args.query, results: [], omitted: [], fallback: "La busqueda web esta temporalmente limitada. Puedo responder con los datos de tu aplicacion." };
+  try {
+    return await searchWeb({ query: args.query, consent: true });
+  } catch (error) {
+    return { source: "internet" as const, query: args.query, results: [], omitted: [], fallback: error instanceof WebSearchError ? error.message : "La busqueda web no esta disponible. Puedo responder con los datos de tu aplicacion." };
+  }
+}
+
 export function scopedReadOnlyToolRepository(selection: ContextSelection, permissions: AIAcademicPermissions = defaultAIAcademicPermissions, maxItemsPerCategory = DEFAULT_AI_CONTEXT_ITEM_LIMIT, scopeSubjectIds: string[] = [], timeZone = DEFAULT_TIME_ZONE, now = new Date()): ReadOnlyToolRepository {
   const limit = (requested: number) => toolLimit(requested, maxItemsPerCategory);
   const explicitRange = (args: { query?: string; timeRange?: "today" | "tomorrow" | "week" | "month" | "upcoming" | "recent"; from?: Date; to?: Date }) => {
@@ -140,9 +159,10 @@ export function scopedReadOnlyToolRepository(selection: ContextSelection, permis
     studySessions: async (userId, args) => permissions.canReadSessionsAndStatistics ? academicContextRepository.studySessions(userId, selection.studySessionIds, { limit: limit(args.limit), subjectIds: selection.studySessionIds.length ? undefined : scopedSubjectIds(selection, scopeSubjectIds, args.subjectId), ...(selection.studySessionIds.length ? {} : dateOptions(requestedRange(args))), timeZone }) : [],
     statistics: (userId, args) => permissions.canReadSessionsAndStatistics ? academicContextRepository.statistics!(userId, { limit: limit(args.limit), ...dateOptions(requestedRange(args)), timeZone }) : Promise.resolve({}),
     schedule: (userId, args) => permissions.canReadSchedule ? academicContextRepository.schedule!(userId, { limit: limit(args.limit), dayOfWeek: (() => { const range = explicitRange(args); return range && "kind" in range && (range.kind === "today" || range.kind === "tomorrow") ? zonedDayOfWeek(range.start ?? now, timeZone) : undefined; })(), timeZone }) : Promise.resolve([]),
-    calendar: (userId, args) => permissions.canReadSchedule && permissions.canReadTasksAndBosses ? academicContextRepository.calendar!(userId, { limit: limit(args.limit), ...dateOptions(upcomingRange(args)), timeZone }) : Promise.resolve([]),
+    calendar: (userId, args) => permissions.canReadSchedule && permissions.canReadTasksAndBosses ? academicContextRepository.calendar!(userId, { query: args.query, limit: limit(args.limit), ...dateOptions(upcomingRange(args)), timeZone }) : Promise.resolve([]),
     materials: async (userId, args) => permissions.canReadMaterials ? (await academicContextRepository.materials(userId, selection.materialIds, { query: args.query, limit: limit(args.limit), subjectIds: selection.materialIds.length ? undefined : scopedSubjectIds(selection, scopeSubjectIds, args.subjectId), timeZone })).map(serializeMaterialMetadata) : [],
     gamification: (userId, args) => permissions.canReadGamification ? academicContextRepository.gamification!(userId, { limit: limit(args.limit), from: zonedDayStart(now, timeZone, -7), to: now, timeZone }) : Promise.resolve({}),
+    webSearch: safeWebSearch,
   };
 }
 
@@ -159,6 +179,7 @@ export const emptyReadOnlyToolRepository: ReadOnlyToolRepository = {
   calendar: async () => [],
   materials: async () => [],
   gamification: async () => ({}),
+  webSearch: safeWebSearch,
 };
 
 export async function getAISettings(userId: string) {
@@ -168,7 +189,7 @@ export async function getAISettings(userId: string) {
     const model = aiModelSchema.safeParse(stored.model).data;
     const contextLimit = Number.isSafeInteger(stored.contextLimit) && stored.contextLimit >= 1_000 && stored.contextLimit <= 50_000 ? stored.contextLimit : DEFAULT_AI_CONTEXT_LIMIT;
     const maxItemsPerCategory = Number.isSafeInteger(stored.maxItemsPerCategory) && stored.maxItemsPerCategory >= 1 && stored.maxItemsPerCategory <= 50 ? stored.maxItemsPerCategory : DEFAULT_AI_CONTEXT_ITEM_LIMIT;
-    return { ...stored, ollamaUrl: ollamaUrl ?? DEFAULT_OLLAMA_URL, model: model ?? DEFAULT_AI_MODEL, contextLimit, maxItemsPerCategory };
+    return { ...stored, ollamaUrl: ollamaUrl ?? DEFAULT_OLLAMA_URL, model: model ?? DEFAULT_AI_MODEL, canUseInternet: stored.canUseInternet ?? false, contextLimit, maxItemsPerCategory };
   }
   return {
     userId,
@@ -178,6 +199,7 @@ export async function getAISettings(userId: string) {
     isAIEnabled: true,
     isAcademicContextEnabled: true,
     ...defaultAIAcademicPermissions,
+    canUseInternet: false,
     contextLimit: DEFAULT_AI_CONTEXT_LIMIT,
     maxItemsPerCategory: DEFAULT_AI_CONTEXT_ITEM_LIMIT,
     createdAt: new Date(0),

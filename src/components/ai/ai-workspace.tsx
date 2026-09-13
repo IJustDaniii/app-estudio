@@ -7,6 +7,7 @@ import { ChatComposer } from "@/components/ai/chat-composer";
 import { ChatSidebar } from "@/components/ai/chat-sidebar";
 import { MessageList } from "@/components/ai/message-list";
 import type { AISettingsValue, ChatMessage, ChatSummary, ConnectionState, ContextOptions, ContextSelection, Pagination } from "@/components/ai/types";
+import type { AIActionProposalForClient } from "@/lib/ai/proposals";
 import { Button } from "@/components/ui/button";
 import { effectiveContextSelection, emptyContextSelection } from "@/lib/ai/validation";
 
@@ -14,8 +15,13 @@ type StreamEvent =
   | { type: "meta"; chat?: ChatSummary; userMessage: ChatMessage; assistantMessage: ChatMessage; warnings: string[] }
   | { type: "delta"; content: string }
   | { type: "warning"; warnings: string[] }
+  | { type: "proposal"; proposal: AIActionProposalForClient }
   | { type: "done"; message: ChatMessage; warnings: string[] }
   | { type: "error"; error: { code: string; message: string }; partialContent: string };
+
+function emptyContextOptions(): ContextOptions {
+  return { subjects: [], topics: [], tasks: [], bosses: [], grades: [], goals: [], studySessions: [], materials: [] };
+}
 
 async function errorMessage(response: Response) {
   const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
@@ -36,10 +42,6 @@ async function connectionFor(settings: AISettingsValue): Promise<ConnectionState
   }
 }
 
-function emptyContextOptions(): ContextOptions {
-  return { subjects: [], topics: [], tasks: [], bosses: [], grades: [], goals: [], studySessions: [], materials: [] };
-}
-
 export function AIWorkspace({ initialChats, initialChatPagination, initialActiveId, initialMessages, initialMessagePagination, initialSettings, contextOptions }: {
   initialChats: ChatSummary[]; initialChatPagination: Pagination; initialActiveId: string | null; initialMessages: ChatMessage[]; initialMessagePagination: Pagination; initialSettings: AISettingsValue; contextOptions: ContextOptions;
 }) {
@@ -49,9 +51,11 @@ export function AIWorkspace({ initialChats, initialChatPagination, initialActive
   const [chatPagination, setChatPagination] = useState(initialChatPagination);
   const [messagePagination, setMessagePagination] = useState(initialMessagePagination);
   const [settings, setSettings] = useState(initialSettings);
-  const [availableOptions, setAvailableOptions] = useState(contextOptions);
+  const [, setAvailableOptions] = useState<ContextOptions>(contextOptions);
   const [selection, setSelection] = useState<ContextSelection>(emptyContextSelection);
   const [usePersonalContext, setUsePersonalContext] = useState(true);
+  const [allowInternet, setAllowInternet] = useState(false);
+  const [pendingProposal, setPendingProposal] = useState<AIActionProposalForClient | null>(null);
   const [connection, setConnection] = useState<ConnectionState>({ status: "checking", message: "Comprobando Ollama…" });
   const [busy, setBusy] = useState(false);
   const [loadingChat, setLoadingChat] = useState(false);
@@ -60,8 +64,8 @@ export function AIWorkspace({ initialChats, initialChatPagination, initialActive
   const [uploading, setUploading] = useState(false);
   const [notice, setNotice] = useState("");
   const checkedInitialConnection = useRef(false);
-  const contextOptionsRequest = useRef(0);
   const sending = useRef(false);
+  const requestId = useRef<string | null>(null);
 
   useEffect(() => {
     if (checkedInitialConnection.current) return;
@@ -71,7 +75,7 @@ export function AIWorkspace({ initialChats, initialChatPagination, initialActive
 
   function createChat() {
     // "Nuevo" sólo prepara la vista: no deja conversaciones vacías en la base.
-    setActiveId(null); setMessages([]); setMessagePagination({ page: 1, pageSize: 50, totalItems: 0, totalPages: 0, hasPrevious: false, hasNext: false }); setSelection(emptyContextSelection); setUsePersonalContext(true); setNotice("");
+    setActiveId(null); setMessages([]); setMessagePagination({ page: 1, pageSize: 50, totalItems: 0, totalPages: 0, hasPrevious: false, hasNext: false }); setUsePersonalContext(true); setAllowInternet(false); setPendingProposal(null); setNotice("");
     window.history.replaceState(null, "", "/app/ai");
   }
 
@@ -82,7 +86,7 @@ export function AIWorkspace({ initialChats, initialChatPagination, initialActive
       const response = await fetch(`/api/ai/chats/${id}`);
       if (!response.ok) throw new Error(await errorMessage(response));
       const chat = await response.json() as ChatSummary & { messages: ChatMessage[]; messagesPagination: Pagination };
-      setActiveId(id); setMessages(chat.messages); setMessagePagination(chat.messagesPagination); setSelection(emptyContextSelection); setUsePersonalContext(true);
+      setActiveId(id); setMessages(chat.messages); setMessagePagination(chat.messagesPagination); setUsePersonalContext(true); setAllowInternet(false); setPendingProposal(null);
       window.history.replaceState(null, "", `/app/ai?chat=${id}`);
     } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo cargar el chat."); }
     finally { setLoadingChat(false); }
@@ -141,32 +145,11 @@ export function AIWorkspace({ initialChats, initialChatPagination, initialActive
       if (!response.ok) { setNotice(await errorMessage(response)); return; }
       const saved = await response.json() as AISettingsValue;
       setSettings(saved);
-      setSelection(effectiveContextSelection(saved.isAIEnabled && saved.isAcademicContextEnabled, selection, saved, saved.maxItemsPerCategory));
-      const refreshed = await refreshContextOptions(saved);
-      if (refreshed) setNotice("Configuración guardada.");
+      setNotice("Configuración guardada.");
       setConnection(await connectionFor(saved));
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "No se pudo guardar la configuración.");
     } finally { setBusy(false); }
-  }
-
-  async function refreshContextOptions(nextSettings: AISettingsValue) {
-    const requestId = contextOptionsRequest.current + 1;
-    contextOptionsRequest.current = requestId;
-    if (!nextSettings.isAIEnabled || !nextSettings.isAcademicContextEnabled) {
-      setAvailableOptions(emptyContextOptions());
-      return true;
-    }
-    try {
-      const response = await fetch("/api/ai/context/options", { cache: "no-store" });
-      if (!response.ok) throw new Error(await errorMessage(response));
-      const nextOptions = await response.json() as ContextOptions;
-      if (requestId === contextOptionsRequest.current) setAvailableOptions(nextOptions);
-      return true;
-    } catch (error) {
-      if (requestId === contextOptionsRequest.current) setNotice(error instanceof Error ? error.message : "No se pudieron actualizar las opciones de contexto.");
-      return false;
-    }
   }
 
   async function testConnection() { setConnection({ status: "checking", message: "Comprobando Ollama…" }); setConnection(await connectionFor(settings)); }
@@ -181,8 +164,6 @@ export function AIWorkspace({ initialChats, initialChatPagination, initialActive
       const result = await response.json() as { error?: string; created?: Array<{ id: string; name: string }>; duplicates?: Array<{ name: string }>; failed?: Array<{ name: string }> };
       if (!response.ok && response.status !== 207) throw new Error(result.error ?? "No se pudo adjuntar el material.");
       const created = result.created ?? [];
-      setAvailableOptions((current) => ({ ...current, materials: [...created.map((item) => ({ id: item.id, label: item.name })), ...current.materials] }));
-      setSelection((current) => ({ ...current, materialIds: [...current.materialIds, ...created.map((item) => item.id)].slice(0, 20) }));
       const details = [created.length ? `${created.length} adjuntado(s)` : "", result.duplicates?.length ? `${result.duplicates.length} duplicado(s)` : "", result.failed?.length ? `${result.failed.length} rechazado(s)` : ""].filter(Boolean).join(" · ");
       setNotice(details || "No se añadió ningún archivo.");
     } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo adjuntar el material."); }
@@ -196,8 +177,10 @@ export function AIWorkspace({ initialChats, initialChatPagination, initialActive
     let assistantId = "";
     try {
       const chatId = activeId ?? "new";
-      const context = settings.isAcademicContextEnabled && usePersonalContext ? effectiveContextSelection(true, selection, settings, settings.maxItemsPerCategory) : emptyContextSelection;
-      const response = await fetch(`/api/ai/chats/${chatId}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content, requestId: crypto.randomUUID(), context, usePersonalContext }) });
+      const context = emptyContextSelection;
+      const messageRequestId = requestId.current ?? crypto.randomUUID();
+      requestId.current = messageRequestId;
+      const response = await fetch(`/api/ai/chats/${chatId}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content, requestId: messageRequestId, context, usePersonalContext, allowInternet: allowInternet && settings.canUseInternet }) });
       if (!response.ok || !response.body) throw new Error(await errorMessage(response));
       const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = "";
       while (true) {
@@ -208,7 +191,8 @@ export function AIWorkspace({ initialChats, initialChatPagination, initialActive
           const event = JSON.parse(line) as StreamEvent;
           if (event.type === "meta") { assistantId = event.assistantMessage.id; if (event.chat) { setChats((current) => [event.chat!, ...current]); setActiveId(event.chat.id); window.history.replaceState(null, "", `/app/ai?chat=${event.chat.id}`); } setMessages((current) => [...current, event.userMessage, event.assistantMessage]); }
           else if (event.type === "delta") setMessages((current) => current.map((message) => message.id === assistantId ? { ...message, content: message.content + event.content } : message));
-          else if (event.type === "done") { setMessages((current) => current.map((message) => message.id === event.message.id ? event.message : message)); setSelection(emptyContextSelection); }
+          else if (event.type === "done") { setMessages((current) => current.map((message) => message.id === event.message.id ? event.message : message)); setAllowInternet(false); requestId.current = null; }
+          else if (event.type === "proposal") setPendingProposal(event.proposal);
           else if (event.type === "warning") setNotice(event.warnings.join(" "));
           else { setMessages((current) => current.map((message) => message.id === assistantId ? { ...message, content: event.partialContent, status: "ERROR", errorCode: event.error.code } : message)); setNotice(event.error.message); setConnection((current) => event.error.code === "UNAVAILABLE" ? { status: "offline", message: event.error.message } : current); }
         }
@@ -219,9 +203,31 @@ export function AIWorkspace({ initialChats, initialChatPagination, initialActive
     finally { sending.current = false; setBusy(false); }
   }
 
+  async function confirmProposal() {
+    if (!pendingProposal) return;
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/ai/actions/proposals/${pendingProposal.id}/confirm`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmationToken: pendingProposal.confirmationToken }) });
+      if (!response.ok) throw new Error(await errorMessage(response));
+      setPendingProposal(null);
+      setNotice("Cambio aplicado correctamente.");
+    } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo aplicar el cambio."); }
+    finally { setBusy(false); }
+  }
+
+  async function cancelProposal() {
+    if (!pendingProposal) return;
+    try {
+      const response = await fetch(`/api/ai/actions/proposals/${pendingProposal.id}/cancel`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmationToken: pendingProposal.confirmationToken }) });
+      if (!response.ok) throw new Error(await errorMessage(response));
+      setPendingProposal(null);
+      setNotice("Propuesta cancelada. No se ha modificado ningun dato.");
+    } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo cancelar la propuesta."); }
+  }
+
   return <section className="mx-auto flex h-[calc(100dvh-5rem)] min-h-[38rem] max-w-[96rem] flex-col px-0 lg:h-screen lg:p-5">
     <div className="flex items-center gap-3 border-b bg-card px-4 py-3 lg:rounded-t-xl lg:border"><span className="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground"><Bot className="size-4" /></span><div><h1 className="text-base font-semibold">IA</h1><p className={`text-xs ${!settings.isAIEnabled || connection.status === "offline" ? "text-destructive" : "text-muted-foreground"}`}>{!settings.isAIEnabled ? "La IA está desactivada en tus ajustes." : connection.message}</p></div>{settings.isAIEnabled && connection.status === "offline" && <Button type="button" size="sm" variant="outline" className="ml-auto" onClick={testConnection}><RefreshCw className="size-3.5" />Reintentar</Button>}</div>
-    <div className="grid min-h-0 flex-1 bg-card lg:grid-cols-[17rem_1fr] lg:border-x"><ChatSidebar chats={chats} activeId={activeId} disabled={busy} hasMore={Boolean(chatPagination.hasNext)} loadingMore={loadingMoreChats} onLoadMore={loadMoreChats} onCreate={createChat} onSelect={selectChat} onRename={renameChat} onDelete={deleteChat} /><div className="flex min-h-0 flex-col"><AISettingsPanel value={settings} connection={connection} busy={busy} onChange={(value) => { setSettings(value); setSelection(effectiveContextSelection(value.isAIEnabled && value.isAcademicContextEnabled, selection, value, value.maxItemsPerCategory)); if (!value.isAIEnabled || !value.isAcademicContextEnabled) setAvailableOptions(emptyContextOptions()); }} onSave={saveSettings} onTest={testConnection} />{notice && <div className="flex items-start gap-2 border-b bg-muted/60 px-4 py-2 text-xs" role="status"><CircleAlert className="mt-0.5 size-3.5 shrink-0" />{notice}</div>}<MessageList messages={messages} isLoading={loadingChat} canLoadOlder={Boolean(messagePagination.hasNext)} loadingOlder={loadingOlderMessages} onLoadOlder={loadOlderMessages} /><ChatComposer disabled={busy || loadingChat || uploading || !settings.isAIEnabled} contextEnabled={settings.isAIEnabled && settings.isAcademicContextEnabled} usePersonalContext={usePersonalContext} permissions={settings} maxItemsPerCategory={settings.maxItemsPerCategory} options={availableOptions} context={selection} uploading={uploading} onContextChange={setSelection} onPersonalContextChange={(value) => { setUsePersonalContext(value); if (!value) setSelection(emptyContextSelection); }} onUpload={uploadMaterials} onSend={sendMessage} /></div></div>
+    <div className="grid min-h-0 flex-1 bg-card lg:grid-cols-[17rem_1fr] lg:border-x"><ChatSidebar chats={chats} activeId={activeId} disabled={busy} hasMore={Boolean(chatPagination.hasNext)} loadingMore={loadingMoreChats} onLoadMore={loadMoreChats} onCreate={createChat} onSelect={selectChat} onRename={renameChat} onDelete={deleteChat} /><div className="flex min-h-0 flex-col"><AISettingsPanel value={settings} connection={connection} busy={busy} onChange={(value) => { setSettings(value); setSelection(effectiveContextSelection(value.isAIEnabled && value.isAcademicContextEnabled, selection, value, value.maxItemsPerCategory)); if (!value.isAIEnabled || !value.isAcademicContextEnabled) setAvailableOptions(emptyContextOptions()); }} onSave={saveSettings} onTest={testConnection} />{notice && <div className="flex items-start gap-2 border-b bg-muted/60 px-4 py-2 text-xs" role="status"><CircleAlert className="mt-0.5 size-3.5 shrink-0" />{notice}</div>}{pendingProposal && <div className="border-b bg-amber-50 px-4 py-3 text-sm dark:bg-amber-950/30" role="alert"><p className="font-semibold">La IA propone: {pendingProposal.summary}</p><p className="mt-1 text-xs text-muted-foreground">Este cambio requiere tu confirmacion explicita y caduca en unos minutos.</p><div className="mt-2 flex gap-2"><Button type="button" size="sm" onClick={confirmProposal} disabled={busy}>Confirmar cambio</Button><Button type="button" size="sm" variant="outline" onClick={cancelProposal} disabled={busy}>Cancelar</Button></div></div>}<MessageList messages={messages} isLoading={loadingChat} canLoadOlder={Boolean(messagePagination.hasNext)} loadingOlder={loadingOlderMessages} onLoadOlder={loadOlderMessages} /><ChatComposer disabled={busy || loadingChat || uploading || !settings.isAIEnabled} contextEnabled={settings.isAIEnabled && settings.isAcademicContextEnabled} usePersonalContext={usePersonalContext} canUseInternet={settings.canUseInternet} allowInternet={allowInternet} uploading={uploading} onPersonalContextChange={(value) => { setUsePersonalContext(value); if (!value) setSelection(emptyContextSelection); }} onAllowInternetChange={setAllowInternet} onUpload={uploadMaterials} onSend={sendMessage} /></div></div>
     <p className="border-t bg-card px-4 py-2 text-center text-[11px] text-muted-foreground lg:rounded-b-xl lg:border">La IA puede equivocarse. Revisa fechas, notas y decisiones académicas importantes.</p>
   </section>;
 }

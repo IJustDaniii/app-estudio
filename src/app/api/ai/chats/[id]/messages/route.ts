@@ -12,6 +12,7 @@ import { academicContextRepository, emptyReadOnlyToolRepository, getAISettings, 
 import { chatIdSchema, defaultChatTitle, effectiveContextSelection, sendMessageSchema } from "@/lib/ai/validation";
 import { getStorageProvider } from "@/lib/materials/storage";
 import { prisma } from "@/lib/prisma";
+import { createAIActionProposal } from "@/lib/ai/proposals";
 
 export const runtime = "nodejs";
 
@@ -54,6 +55,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     if (!isNewChat && !existingChat) return aiApiError("NOT_FOUND", "Chat no encontrado", 404);
     if (!settings.isAIEnabled) return aiApiError("AI_DISABLED", "La IA está desactivada en tus ajustes.", 403);
     const contextEnabled = settings.isAcademicContextEnabled && data.usePersonalContext;
+    const internetEnabled = Boolean(settings.canUseInternet && data.allowInternet);
     const timeZone = contextEnabled ? await getUserTimezone(userId) : DEFAULT_TIME_ZONE;
     const now = new Date();
     const permissions = {
@@ -85,7 +87,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     ]);
 
     const plan = selectAcademicContextPlan({ message: data.content, selection: academicContext.selection, permissions });
-    const availableTools = contextEnabled ? toolDefinitionsForPermissions(permissions, plan.categories, plan.toolNames) : [];
+    const availableTools = toolDefinitionsForPermissions(permissions, contextEnabled ? plan.categories : [], contextEnabled ? plan.toolNames : plan.toolNames.filter((name) => name === "propose_action" || name === "search_web"), { includeAction: plan.requiresAction, includeWeb: internetEnabled && plan.requiresWeb });
     const snapshotData = { ...academicContext.snapshot, selection: academicContext.selection, warnings: academicContext.warnings };
     const snapshot = snapshotData as Prisma.InputJsonValue;
     let chat = existingChat;
@@ -128,7 +130,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         try {
           let images = academicContext.images.map((image) => image.base64);
           let supportsTools = false;
-          if (contextEnabled && (images.length > 0 || availableTools.length > 0)) {
+          if (images.length > 0 || availableTools.length > 0) {
             try {
               const capabilities = await provider.getModelCapabilities({ baseUrl: settings.ollamaUrl, model: settings.model, timeoutMs: 5_000, signal: generationController.signal });
               supportsTools = capabilities.tools;
@@ -137,8 +139,20 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
                 addWarning("El modelo activo no admite imágenes; se omitieron en esta respuesta.");
                 send({ type: "warning", warnings });
               }
+              if (!capabilities.vision && academicContext.images.length) {
+                addWarning(`No se analizaron estas imagenes: ${academicContext.images.map((image) => image.name).join(", ")}.`);
+                send({ type: "warning", warnings });
+              }
+              if (!capabilities.tools && availableTools.length) {
+                addWarning("El modelo activo no admite herramientas; se continua sin consultas ni acciones adicionales.");
+                send({ type: "warning", warnings });
+              }
             } catch {
               images = imagesForModel(images, false);
+              if (academicContext.images.length) {
+                addWarning(`No se analizaron estas imagenes: ${academicContext.images.map((image) => image.name).join(", ")}.`);
+                send({ type: "warning", warnings });
+              }
               addWarning("No se pudieron comprobar las capacidades del modelo; se omitieron imágenes y herramientas.");
               send({ type: "warning", warnings });
             }
@@ -160,12 +174,17 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
             signal: generationController.signal,
             allowTools: supportsTools,
             availableTools,
+            allowWebSearch: internetEnabled,
+            actionProposalCreator: createAIActionProposal,
+            chatId: chat!.id,
+            requestId: data.requestId,
           })) {
             if (event.type === "text-delta") {
               if (assistantContent.length + event.content.length > MAX_ASSISTANT_CHARACTERS) throw new AIProviderError("PROVIDER_ERROR");
               assistantContent += event.content;
               send({ type: "delta", content: event.content });
-            } else usage = event.usage;
+            } else if (event.type === "action-proposal") send({ type: "proposal", proposal: event.proposal });
+            else if (event.type === "done") usage = event.usage;
           }
           const completed = await prisma.aIMessage.update({ where: { id: assistantMessage.id }, data: { content: assistantContent, status: "COMPLETE", inputTokens: usage?.inputTokens, outputTokens: usage?.outputTokens, contextSnapshot: { ...snapshotData, warnings } as Prisma.InputJsonValue }, select: { id: true, role: true, content: true, status: true, model: true, errorCode: true, contextSnapshot: true, createdAt: true } });
           await prisma.aIChat.update({ where: { id: chat!.id }, data: { updatedAt: new Date() } });

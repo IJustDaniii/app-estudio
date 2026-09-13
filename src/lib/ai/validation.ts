@@ -39,6 +39,7 @@ export const aiSettingsSchema = z.object({
   canReadSchedule: z.boolean().default(true),
   canReadMaterials: z.boolean().default(true),
   canReadGamification: z.boolean().default(true),
+  canUseInternet: z.boolean().default(false),
   contextLimit: z.number().int().min(1_000).max(50_000).default(DEFAULT_AI_CONTEXT_LIMIT),
   maxItemsPerCategory: z.number().int().min(1).max(MAX_AI_CONTEXT_ITEM_LIMIT).default(DEFAULT_AI_CONTEXT_ITEM_LIMIT),
 });
@@ -95,6 +96,7 @@ export const sendMessageSchema = z.object({
   requestId: z.string().uuid().optional(),
   context: contextSelectionSchema.default(emptyContextSelection),
   usePersonalContext: z.boolean().default(true),
+  allowInternet: z.boolean().default(false),
 });
 
 export function effectiveContextSelection(isEnabled: boolean, selection: ContextSelection, permissions: AIAcademicPermissions = defaultAIAcademicPermissions, maxItemsPerCategory = DEFAULT_AI_CONTEXT_ITEM_LIMIT) {

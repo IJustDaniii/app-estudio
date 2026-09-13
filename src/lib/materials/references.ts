@@ -1,4 +1,7 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+
+type Database = typeof prisma | Prisma.TransactionClient;
 
 type MaterialReferences = {
   subjectId: string | null;
@@ -15,12 +18,12 @@ export function resolveMaterialSubjectId(explicitSubjectId: string | null, refer
   return explicitSubjectId ?? derived[0] ?? null;
 }
 
-export async function ensureOwnedMaterialReferences(userId: string, values: MaterialReferences) {
+export async function ensureOwnedMaterialReferences(userId: string, values: MaterialReferences, database: Database = prisma) {
   const [subject, topic, task, boss] = await Promise.all([
-    values.subjectId ? prisma.subject.findFirst({ where: { id: values.subjectId, userId }, select: { id: true } }) : null,
-    values.topicId ? prisma.topic.findFirst({ where: { id: values.topicId, userId }, select: { id: true, subjectId: true } }) : null,
-    values.taskId ? prisma.task.findFirst({ where: { id: values.taskId, userId }, select: { id: true, subjectId: true } }) : null,
-    values.bossId ? prisma.boss.findFirst({ where: { id: values.bossId, userId }, select: { id: true, subjectId: true } }) : null,
+    values.subjectId ? database.subject.findFirst({ where: { id: values.subjectId, userId }, select: { id: true } }) : null,
+    values.topicId ? database.topic.findFirst({ where: { id: values.topicId, userId }, select: { id: true, subjectId: true } }) : null,
+    values.taskId ? database.task.findFirst({ where: { id: values.taskId, userId }, select: { id: true, subjectId: true } }) : null,
+    values.bossId ? database.boss.findFirst({ where: { id: values.bossId, userId }, select: { id: true, subjectId: true } }) : null,
   ]);
 
   if ((values.subjectId && !subject) || (values.topicId && !topic) || (values.taskId && !task) || (values.bossId && !boss)) {

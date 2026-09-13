@@ -41,8 +41,8 @@ describe("rutas autenticadas de IA", () => {
     expect(chatCount).toHaveBeenCalledWith({ where: { userId: "user-a" } });
 
     const response = await POST(new Request("http://localhost/api/ai/chats", { method: "POST", body: JSON.stringify({ title: "Privado" }), headers: { "content-type": "application/json" } }));
-    expect(response.status).toBe(201);
-    expect(chatCreate).toHaveBeenCalledWith(expect.objectContaining({ data: { userId: "user-a", title: "Privado" } }));
+    expect(response.status).toBe(405);
+    expect(chatCreate).not.toHaveBeenCalled();
   });
 
   it("carga mensajes antiguos por páginas sin salir del chat del usuario", async () => {

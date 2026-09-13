@@ -1,7 +1,6 @@
-import { ZodError } from "zod";
-import { aiApiError, aiRateLimitError, apiUserId, parseAIJson } from "@/lib/ai/http";
+import { aiApiError, aiRateLimitError, apiUserId } from "@/lib/ai/http";
 import { checkAIRateLimit } from "@/lib/ai/rate-limit";
-import { createChatSchema, listChatsQuerySchema } from "@/lib/ai/validation";
+import { listChatsQuerySchema } from "@/lib/ai/validation";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -12,7 +11,7 @@ export async function GET(request: Request) {
   const rate = checkAIRateLimit(`chats:list:${userId}`, 60);
   if (!rate.allowed) return aiRateLimitError(rate.retryAfterSeconds);
   const parsed = listChatsQuerySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
-  if (!parsed.success) return aiApiError("VALIDATION_ERROR", "Paginación no válida", 422);
+  if (!parsed.success) return aiApiError("VALIDATION_ERROR", "Paginacion no valida", 422);
   const { page, pageSize } = parsed.data;
   const [rows, totalItems] = await Promise.all([
     prisma.aIChat.findMany({ where: { userId }, select: { id: true, title: true, createdAt: true, updatedAt: true }, orderBy: { updatedAt: "desc" }, skip: (page - 1) * pageSize, take: pageSize }),
@@ -21,17 +20,10 @@ export async function GET(request: Request) {
   return Response.json({ data: rows, pagination: { page, pageSize, totalItems, totalPages: Math.ceil(totalItems / pageSize) } }, { headers: { "Cache-Control": "private, no-store" } });
 }
 
-export async function POST(request: Request) {
+/** Chat creation is intentionally coupled to the first message transaction. */
+export async function POST(_request: Request) {
+  void _request;
   const userId = await apiUserId();
   if (!userId) return aiApiError("UNAUTHORIZED", "No autorizado", 401);
-  const rate = checkAIRateLimit(`chats:create:${userId}`, 30);
-  if (!rate.allowed) return aiRateLimitError(rate.retryAfterSeconds);
-  try {
-    const data = await parseAIJson(request, createChatSchema);
-    const chat = await prisma.aIChat.create({ data: { userId, title: data.title ?? "Nuevo chat" }, select: { id: true, title: true, createdAt: true, updatedAt: true } });
-    return Response.json(chat, { status: 201 });
-  } catch (error) {
-    if (error instanceof ZodError || error instanceof SyntaxError || (error instanceof Error && error.message === "AI_BODY_TOO_LARGE")) return aiApiError("VALIDATION_ERROR", "El chat no es válido", 422);
-    return aiApiError("INTERNAL_ERROR", "No se pudo crear el chat", 500);
-  }
+  return aiApiError("CHAT_CREATION_DEFERRED", "Los chats se crean al enviar el primer mensaje.", 405);
 }

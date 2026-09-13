@@ -1,5 +1,7 @@
 import { z } from "zod";
 import type { AIContextCategory, AIToolDefinition } from "@/lib/ai/types";
+import { AI_ACTION_TOOL_DEFINITION, AI_WEB_TOOL_NAME } from "@/lib/ai/action-contract";
+import type { WebSearchResponse } from "@/lib/ai/web-search";
 import { defaultAIAcademicPermissions, type AIAcademicPermissions, type ContextSelection } from "@/lib/ai/validation";
 
 const timeRangeSchema = z.enum(["today", "tomorrow", "week", "month", "upcoming", "recent"]).optional();
@@ -11,6 +13,7 @@ const querySchema = z.object({
   to: z.coerce.date().optional(),
   limit: z.number().int().min(1).max(20).default(10),
 });
+const webSearchSchema = z.object({ query: z.string().trim().min(1).max(200) });
 
 const toolCategory: Record<string, AIContextCategory> = {
   consult_subjects: "subjects",
@@ -50,12 +53,16 @@ export const AI_TOOL_DEFINITIONS: AIToolDefinition[] = [
   { name: "consult_calendar", description: "Consulta calendario usando query como texto y timeRange como fechas.", access: "read", parameters: { type: "object", properties: { query: temporalProperties.query, timeRange: temporalProperties.timeRange, limit: temporalProperties.limit } } },
   { name: "consult_materials", description: "Consulta materiales por texto o asignatura.", access: "read", parameters: { type: "object", properties: { query: temporalProperties.query, subjectId: temporalProperties.subjectId, limit: temporalProperties.limit } } },
   { name: "consult_gamification", description: "Consulta XP, nivel, monedas, misiones y racha.", access: "read", parameters: { type: "object", properties: { limit: temporalProperties.limit } } },
+  { name: AI_WEB_TOOL_NAME, description: "Busca informacion actualizada en Internet. Solo devuelve fuentes externas y nunca recibe datos personales de la aplicacion.", access: "read", parameters: { type: "object", properties: { query: { type: "string", minLength: 1, maxLength: 200 } }, required: ["query"] } },
 ];
 
-export function toolDefinitionsForPermissions(permissions: AIAcademicPermissions = defaultAIAcademicPermissions, categories?: AIContextCategory[], toolNames?: string[]) {
+export function toolDefinitionsForPermissions(permissions: AIAcademicPermissions = defaultAIAcademicPermissions, categories?: AIContextCategory[], toolNames?: string[], options?: { includeAction?: boolean; includeWeb?: boolean }) {
   const allowedCategories = categories ? new Set(categories) : null;
   const allowedToolNames = toolNames ? new Set(toolNames) : null;
-  return AI_TOOL_DEFINITIONS.filter((tool) => {
+  const definitions = [...AI_TOOL_DEFINITIONS, ...(options?.includeAction ? [AI_ACTION_TOOL_DEFINITION] : [])];
+  return definitions.filter((tool) => {
+    if (tool.name === AI_WEB_TOOL_NAME) return Boolean(options?.includeWeb) && (!allowedToolNames || allowedToolNames.has(tool.name));
+    if (tool.name === AI_ACTION_TOOL_DEFINITION.name) return Boolean(options?.includeAction) && (!allowedToolNames || allowedToolNames.has(tool.name));
     const category = toolCategory[tool.name];
     if (allowedCategories && !allowedCategories.has(category)) return false;
     if (allowedToolNames && !allowedToolNames.has(tool.name)) return false;
@@ -82,9 +89,10 @@ export interface ReadOnlyToolRepository {
   calendar?(userId: string, args: z.infer<typeof querySchema>): Promise<unknown[]>;
   materials?(userId: string, args: z.infer<typeof querySchema>): Promise<unknown[]>;
   gamification?(userId: string, args: z.infer<typeof querySchema>): Promise<unknown>;
+  webSearch?(userId: string, args: z.infer<typeof webSearchSchema>): Promise<WebSearchResponse>;
 }
 
-export async function executeReadOnlyTool(input: { name: string; arguments: unknown; userId: string; repository: ReadOnlyToolRepository; allowedToolNames?: string[] }) {
+export async function executeReadOnlyTool(input: { name: string; arguments: unknown; userId: string; repository: ReadOnlyToolRepository; allowedToolNames?: string[]; allowWebSearch?: boolean }) {
   if (input.allowedToolNames && !input.allowedToolNames.includes(input.name)) throw new Error("AI_TOOL_NOT_ALLOWED");
   const args = querySchema.parse(input.arguments);
   switch (input.name) {
@@ -100,6 +108,11 @@ export async function executeReadOnlyTool(input: { name: string; arguments: unkn
     case "consult_calendar": return input.repository.calendar ? input.repository.calendar(input.userId, args) : [];
     case "consult_materials": return input.repository.materials ? input.repository.materials(input.userId, args) : [];
     case "consult_gamification": return input.repository.gamification ? input.repository.gamification(input.userId, args) : {};
+    case AI_WEB_TOOL_NAME: {
+      if (!input.allowWebSearch || !input.repository.webSearch) throw new Error("AI_WEB_NOT_ALLOWED");
+      const webArgs = webSearchSchema.parse(input.arguments);
+      return input.repository.webSearch(input.userId, webArgs);
+    }
     default: throw new Error("AI_TOOL_NOT_ALLOWED");
   }
 }

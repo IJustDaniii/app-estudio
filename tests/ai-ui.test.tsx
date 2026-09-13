@@ -6,26 +6,26 @@ import { MessageList } from "@/components/ai/message-list";
 import { emptyContextSelection } from "@/lib/ai/validation";
 
 describe("interfaz de IA", () => {
-  it("explica que el contexto requiere selección explícita", () => {
+  it("explica que el contexto autorizado se selecciona automaticamente", () => {
     const markup = renderToStaticMarkup(createElement(ContextPicker, {
       enabled: true,
       value: emptyContextSelection,
       onChange: () => undefined,
       options: { subjects: [], topics: [], tasks: [], bosses: [], grades: [], goals: [], studySessions: [], materials: [] },
     }));
-    expect(markup).toContain("La pregunta guía una selección compacta");
-    expect(markup).toContain("Selecciona sólo lo relevante");
+    expect(markup).toContain("El contexto autorizado se usa automaticamente segun la pregunta");
+    expect(markup).not.toContain("<details");
+    expect(markup).not.toContain("Selecciona");
   });
 
-  it("no permite abrir el selector cuando el contexto está desactivado", () => {
+  it("no renderiza un selector vacio cuando el contexto esta desactivado", () => {
     const markup = renderToStaticMarkup(createElement(ContextPicker, {
       enabled: false,
       value: emptyContextSelection,
       onChange: () => undefined,
       options: { subjects: [], topics: [], tasks: [], bosses: [], grades: [], goals: [], studySessions: [], materials: [] },
     }));
-    expect(markup).toContain('aria-disabled="true"');
-    expect(markup).not.toContain("Selecciona sólo lo relevante");
+    expect(markup).toBe("");
   });
 
   it("muestra los fallos del asistente como recuperables", () => {
@@ -46,7 +46,15 @@ describe("interfaz de IA", () => {
     expect(markup).not.toContain("<details");
   });
 
-  it("indica cuando una respuesta se generó sin contexto personal", () => {
+  it("nombra los elementos que no se analizaron por limite", () => {
+    const markup = renderToStaticMarkup(createElement(MessageList, {
+      isLoading: false,
+      messages: [{ id: "message-omitted", role: "ASSISTANT", content: "Respuesta", status: "COMPLETE", model: "qwen3.5:9b", createdAt: "2026-09-13T00:00:00.000Z", contextSnapshot: { mode: "personal", intent: "materials", used: [], blocked: [], included: [], omitted: [{ type: "material", id: "material-a", label: "Imagen grande" }], warnings: [] } }],
+    }));
+    expect(markup).toContain("No se analizaron por el limite configurado: Imagen grande");
+  });
+
+  it("indica cuando una respuesta se genero sin contexto personal", () => {
     const markup = renderToStaticMarkup(createElement(MessageList, {
       isLoading: false,
       messages: [{ id: "message-no-context", role: "ASSISTANT", content: "Respuesta general", status: "COMPLETE", model: "qwen3.5:9b", createdAt: "2026-09-13T00:00:00.000Z", contextSnapshot: { mode: "none", intent: "today", used: [], blocked: [], included: [], omitted: [], warnings: [] } }],
@@ -54,10 +62,10 @@ describe("interfaz de IA", () => {
     expect(markup).toContain("Sin contexto personal");
   });
 
-  it("renderiza Markdown y fórmulas del asistente como contenido visual", () => {
+  it("renderiza Markdown y formulas del asistente como contenido visual", () => {
     const markup = renderToStaticMarkup(createElement(MessageList, {
       isLoading: false,
-      messages: [{ id: "message-2", role: "ASSISTANT", content: "**Objetivo**\n\n1. Explicación\n2. Fórmula $CO_2$", status: "COMPLETE", model: "qwen3.5:9b", createdAt: "2026-09-13T00:00:00.000Z" }],
+      messages: [{ id: "message-2", role: "ASSISTANT", content: "**Objetivo**\n\n1. Explicacion\n2. Formula $CO_2$", status: "COMPLETE", model: "qwen3.5:9b", createdAt: "2026-09-13T00:00:00.000Z" }],
     }));
     expect(markup).toContain("<strong>Objetivo</strong>");
     expect(markup).toContain("<ol class=");

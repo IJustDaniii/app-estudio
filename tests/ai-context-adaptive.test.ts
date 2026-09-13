@@ -270,6 +270,14 @@ describe("selección adaptativa de contexto académico", () => {
     expect(result.warnings).toContain("Libro grande: AI_MATERIAL_TOO_LARGE");
   });
 
+  it("informa que imagenes excedentes no se analizaron", async () => {
+    const repo = repository();
+    repo.materials = vi.fn(async () => [1, 2, 3, 4].map((id) => ({ id: `image-${id}`, name: `Imagen ${id}`, mimeType: "image/png", size: 10, description: null, type: "NOTES", processingStatus: "PROCESSED", subjectName: null, topicName: null, storageKey: `image-${id}` })));
+    const result = await buildAcademicContext({ userId: "user-a", isEnabled: true, message: "Analiza mis imagenes", maxCharacters: 8_000, selection: emptyContextSelection, permissions: allPermissions, repository: repo, loadMaterial: async () => Buffer.from("png") });
+    expect(result.images).toHaveLength(3);
+    expect(result.warnings.some((warning) => warning.includes("Imagen 4") && warning.includes("no se analizo"))).toBe(true);
+  });
+
   it("limita el análisis total y mantiene recuperables varios materiales lentos", async () => {
     const repo = repository();
     repo.materials = vi.fn(async () => [1, 2, 3, 4].map((id) => ({ id: `material-${id}`, name: `Apuntes ${id}`, mimeType: "text/plain", size: 10, description: null, type: "NOTES", processingStatus: "PROCESSED", subjectName: null, topicName: null, storageKey: `material-${id}` })));
@@ -302,5 +310,34 @@ describe("selección adaptativa de contexto académico", () => {
     expect(result.text).toBe("");
     expect(result.snapshot.mode).toBe("none");
     expect(repo.tasks).not.toHaveBeenCalled();
+  });
+
+  it("trata horario semanal como una consulta exclusiva de horario y calendario", async () => {
+    const repo = repository();
+    const plan = selectAcademicContextPlan({ message: "Cual es mi horario semanal?", permissions: allPermissions });
+    expect(plan.intent).toBe("schedule");
+    expect(plan.categories).toEqual(["schedule"]);
+    expect(plan.toolNames).toEqual(["consult_schedule", "consult_calendar"]);
+
+    await buildAcademicContext({ userId: "user-a", isEnabled: true, message: "Cual es mi horario semanal?", maxCharacters: 4_000, selection: emptyContextSelection, permissions: allPermissions, repository: repo, loadMaterial: async () => Buffer.alloc(0) });
+    expect(repo.tasks).not.toHaveBeenCalled();
+    expect(repo.bosses).not.toHaveBeenCalled();
+    expect(repo.studySessions).not.toHaveBeenCalled();
+    expect(repo.schedule).toHaveBeenCalled();
+    expect(repo.calendar).toHaveBeenCalled();
+  });
+
+  it("mantiene recientes en el intervalo pasado para las tareas", async () => {
+    const repo = repository();
+    const now = new Date("2026-09-13T10:00:00.000Z");
+    await buildAcademicContext({ userId: "user-a", isEnabled: true, message: "Que tareas recientes tengo?", maxCharacters: 4_000, selection: emptyContextSelection, permissions: allPermissions, timeZone: "Europe/Madrid", now, repository: repo, loadMaterial: async () => Buffer.alloc(0) });
+    expect(repo.tasks).toHaveBeenCalledWith("user-a", [], expect.objectContaining({
+      from: new Date("2026-08-29T22:00:00.000Z"),
+      to: now,
+    }));
+    expect(repo.bosses).toHaveBeenCalledWith("user-a", [], expect.objectContaining({
+      from: new Date("2026-08-29T22:00:00.000Z"),
+      to: now,
+    }));
   });
 });

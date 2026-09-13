@@ -5,6 +5,7 @@ const bossFindMany = vi.hoisted(() => vi.fn());
 const gradeFindMany = vi.hoisted(() => vi.fn());
 const subjectFindMany = vi.hoisted(() => vi.fn());
 const timetableFindMany = vi.hoisted(() => vi.fn());
+const calendarGoalFindMany = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -13,6 +14,7 @@ vi.mock("@/lib/prisma", () => ({
     grade: { findMany: gradeFindMany },
     subject: { findMany: subjectFindMany },
     timetableEntry: { findMany: timetableFindMany },
+    goal: { findMany: calendarGoalFindMany },
   },
 }));
 
@@ -23,6 +25,7 @@ describe("repositorio de contexto académico", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     timetableFindMany.mockResolvedValue([]);
+    calendarGoalFindMany.mockResolvedValue([]);
   });
 
   it("mantiene el userId en cada consulta de herramienta", async () => {
@@ -131,5 +134,11 @@ describe("repositorio de contexto académico", () => {
     await repository.grades("user-a", { limit: 5 });
 
     expect(gradeFindMany).not.toHaveBeenCalled();
+  });
+
+  it("aplica el texto de busqueda a cada fuente del calendario", async () => {
+    const repository = scopedReadOnlyToolRepository(emptyContextSelection, undefined, 20, [], "Europe/Madrid", new Date("2026-09-13T10:00:00.000Z"));
+    await repository.calendar?.("user-a", { query: "matematicas", limit: 5, timeRange: "month" });
+    expect(calendarGoalFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ title: expect.objectContaining({ contains: "matematicas" }) }) }));
   });
 });

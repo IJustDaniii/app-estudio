@@ -61,6 +61,15 @@ enum AIMessageStatus {
   ERROR
 }
 
+enum AIActionStatus {
+  PENDING
+  EXECUTING
+  EXECUTED
+  CANCELLED
+  EXPIRED
+  FAILED
+}
+
 model User {
   id            String           @id @default(cuid())
   name          String
@@ -86,6 +95,8 @@ model User {
   aiSettings    AISettings?
   aiChats       AIChat[]
   aiMessages    AIMessage[]
+  aiActionProposals AIActionProposal[]
+  aiAuditLogs   AIAuditLog[]
 }
 
 model AISettings {
@@ -102,6 +113,7 @@ model AISettings {
   canReadSchedule          Boolean        @default(true)
   canReadMaterials         Boolean        @default(true)
   canReadGamification      Boolean        @default(true)
+  canUseInternet            Boolean        @default(false)
   contextLimit             Int            @default(12000)
   maxItemsPerCategory      Int            @default(20)
   createdAt                DateTime       @default(now())
@@ -114,6 +126,8 @@ model AIChat {
   userId    String
   user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages  AIMessage[]
+  actionProposals AIActionProposal[]
+  auditLogs AIAuditLog[]
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
@@ -141,6 +155,46 @@ model AIMessage {
 
   @@index([userId, chatId, createdAt])
   @@unique([userId, requestId])
+}
+
+model AIActionProposal {
+  id                    String         @id @default(cuid())
+  action                String
+  arguments             Json
+  argumentHash          String
+  summary               String
+  status                AIActionStatus @default(PENDING)
+  confirmationTokenHash String         @unique
+  requestId             String?
+  result                Json?
+  expiresAt             DateTime
+  userId                String
+  user                 User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chatId                String?
+  chat                  AIChat?        @relation(fields: [chatId], references: [id], onDelete: SetNull)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  @@unique([userId, requestId])
+  @@index([userId, status, expiresAt])
+}
+
+model AIAuditLog {
+  id         String   @id @default(cuid())
+  action     String
+  entity     String
+  outcome    String
+  summary    String
+  metadata   Json?
+  proposalId String?
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chatId     String?
+  chat       AIChat?  @relation(fields: [chatId], references: [id], onDelete: SetNull)
+  createdAt  DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, proposalId])
 }
 
 model Subject {
