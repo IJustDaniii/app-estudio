@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useState } from "react";
 import { Pause, Play, RotateCcw, Square } from "lucide-react";
-import { recordStudySession } from "@/app/actions";
+import { recordStudySession, startStudySession } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -14,6 +14,11 @@ export function StudyTimer({ subjects, tasks, initialMinutes, initialTaskId }: {
   const [remaining, setRemaining] = useState(initialMinutes * 60);
   const [running, setRunning] = useState(false);
   const [startedAt, setStartedAt] = useState<Date | null>(null);
+  const [requestId, setRequestId] = useState<string | null>(null);
+  const [startToken, setStartToken] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+  const [recordState, recordAction, recordPending] = useActionState(recordStudySession, {});
   const [subjectId, setSubjectId] = useState("");
   const [taskId, setTaskId] = useState(initialTaskId ?? "");
   const elapsed = plannedMinutes * 60 - remaining;
@@ -35,8 +40,25 @@ export function StudyTimer({ subjects, tasks, initialMinutes, initialTaskId }: {
   }, [running]);
 
   const display = useMemo(() => `${String(Math.floor(remaining / 60)).padStart(2, "0")}:${String(remaining % 60).padStart(2, "0")}`, [remaining]);
-  const start = () => { if (!startedAt) setStartedAt(new Date()); setRunning(true); };
-  const reset = () => { setRunning(false); setStartedAt(null); setRemaining(plannedMinutes * 60); };
+  const start = async () => {
+    if (startedAt) { setRunning(true); return; }
+    if (starting) return;
+    setStarting(true);
+    setStartError(null);
+    try {
+      const result = await startStudySession(plannedMinutes);
+      if (!result.ok) { setStartError(result.error); return; }
+      setStartedAt(new Date(result.startedAt));
+      setRequestId(result.requestId);
+      setStartToken(result.startToken);
+      setRunning(true);
+    } catch {
+      setStartError("No se pudo iniciar la sesión. Inténtalo de nuevo.");
+    } finally {
+      setStarting(false);
+    }
+  };
+  const reset = () => { setRunning(false); setStartedAt(null); setRequestId(null); setStartToken(null); setStartError(null); setRemaining(plannedMinutes * 60); };
   const changeDuration = (value: string) => { const minutes = Number(value); setPlannedMinutes(minutes); if (!startedAt) setRemaining(minutes * 60); };
 
   const clock = <div className="mx-auto w-full max-w-2xl text-center">
@@ -44,19 +66,22 @@ export function StudyTimer({ subjects, tasks, initialMinutes, initialTaskId }: {
     <p className="mt-5 font-mono text-7xl font-semibold tabular-nums tracking-[-0.08em] sm:text-9xl" aria-live="polite">{display}</p>
     <p className="mt-3 text-sm text-muted-foreground">{running ? "Concentración activa" : startedAt ? "Sesión en pausa" : "Lista para empezar"}</p>
     <div className="mx-auto mt-8 flex max-w-sm justify-center gap-2">
-      {running ? <Button size="lg" variant="secondary" onClick={() => setRunning(false)}><Pause className="size-4" />Pausar</Button> : <Button size="lg" onClick={start}><Play className="size-4" />{startedAt ? "Continuar" : "Empezar"}</Button>}
+      {running ? <Button size="lg" variant="secondary" onClick={() => setRunning(false)}><Pause className="size-4" />Pausar</Button> : <Button size="lg" onClick={start} disabled={starting}><Play className="size-4" />{starting ? "Iniciando…" : startedAt ? "Continuar" : "Empezar"}</Button>}
       <Button size="lg" variant="outline" onClick={reset}><RotateCcw className="size-4" />Reiniciar</Button>
     </div>
-    {startedAt && <form action={recordStudySession} className="mt-4">
-      <input type="hidden" name="startedAt" value={startedAt.toISOString()} />
-      <input type="hidden" name="endedAt" value={new Date().toISOString()} />
+    {startedAt && requestId && startToken && <form action={recordAction} className="mt-4">
+      <input type="hidden" name="requestId" value={requestId} />
+      <input type="hidden" name="startToken" value={startToken} />
       <input type="hidden" name="plannedMinutes" value={plannedMinutes} />
       <input type="hidden" name="actualMinutes" value={Math.floor(elapsed / 60)} />
       <input type="hidden" name="subjectId" value={subjectId} />
       <input type="hidden" name="taskId" value={taskId} />
-      <Button type="submit" variant="ghost" disabled={elapsed < 60}><Square className="size-4" />Finalizar y guardar</Button>
+      <Button type="submit" variant="ghost" disabled={elapsed < 60 || recordPending}><Square className="size-4" />{recordPending ? "Guardando…" : "Finalizar y guardar"}</Button>
       {elapsed < 60 && <p className="mt-2 text-xs text-muted-foreground">Podrás guardar al completar el primer minuto.</p>}
+      {recordState.error && <p className="mt-2 text-sm text-destructive" role="alert">{recordState.error}</p>}
+      {recordState.success && <p className="mt-2 text-sm text-muted-foreground" role="status">{recordState.success}</p>}
     </form>}
+    {startError && <p className="mt-4 text-sm text-destructive" role="alert">{startError}</p>}
   </div>;
 
   if (running) {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_STUDY_SESSION_MINUTES, MIN_STUDY_SESSION_MINUTES } from "@/lib/domain/study-session";
 
 const emptyToNullDate = z.preprocess((value) => (value === "" ? null : value), z.coerce.date().nullable());
 const optionalId = z.preprocess((value) => (value === "" ? null : value), z.string().cuid().nullable());
@@ -129,6 +130,21 @@ export const studySessionSchema = z
     (data) => data.actualMinutes * 60_000 <= data.endedAt.getTime() - data.startedAt.getTime() + 59_999,
     { message: "La duración registrada supera el tiempo transcurrido", path: ["actualMinutes"] },
   );
+
+const plannedStudyMinutes = z.coerce.number().int().min(MIN_STUDY_SESSION_MINUTES).max(MAX_STUDY_SESSION_MINUTES);
+
+export const studySessionStartSchema = z.object({
+  plannedMinutes: plannedStudyMinutes,
+});
+
+export const studySessionActionSchema = z.object({
+  requestId: z.string().uuid(),
+  startToken: z.string().min(40).max(2_048),
+  plannedMinutes: plannedStudyMinutes,
+  actualMinutes: z.coerce.number().int().min(MIN_STUDY_SESSION_MINUTES).max(MAX_STUDY_SESSION_MINUTES),
+  subjectId: optionalId,
+  taskId: optionalId,
+});
 
 const petRequestId = z.string().regex(/^[a-zA-Z0-9:_-]{8,100}$/);
 

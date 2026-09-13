@@ -1,5 +1,7 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
+import { Prisma } from "@prisma/client";
 import { AuthError } from "next-auth";
 import { hash } from "bcryptjs";
 import { revalidatePath } from "next/cache";
@@ -8,8 +10,9 @@ import { signIn, signOut, requireUserId } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { DEMO_SUBJECTS } from "@/lib/demo-subjects";
 import { GAME_RULES } from "@/lib/config/game";
-import { dateOnlyForLocalDay, localDayBounds } from "@/lib/domain/dates";
 import { rewardsForStudyMinutes } from "@/lib/domain/progress";
+import { refreshDailyMissionsForUser } from "@/lib/domain/missions-service";
+import { createStudyStartToken, StudySessionError, validateServerStudySession, verifyStudyStartToken, type StudySessionErrorCode } from "@/lib/domain/study-session";
 import { PET_RARITY_CONFIG } from "@/lib/pets/config";
 import { applyAcademicPetProgress, hatchEggForUser, purchaseCosmeticForUser, purchaseEggForUser, setActivePetForUser, startEggIncubationForUser } from "@/lib/pets/service";
 import {
@@ -18,7 +21,8 @@ import {
   goalProgressSchema,
   gradeSchema,
   registerSchema,
-  studySessionSchema,
+  studySessionActionSchema,
+  studySessionStartSchema,
   subjectSchema,
   taskSchema,
   timetableSchema,
@@ -31,9 +35,39 @@ import {
 
 export type AuthFormState = { error?: string } | undefined;
 export type PetActionState = { error?: string; success?: string };
+export type StudySessionActionState = { error?: string; success?: string };
+export type StudyStartResult = { ok: true; requestId: string; startedAt: string; startToken: string } | { ok: false; error: string };
 
 function formObject(formData: FormData) {
   return Object.fromEntries(formData.entries());
+}
+
+function studyTokenSecret() {
+  const secret = process.env.AUTH_SECRET;
+  if (!secret) throw new StudySessionError("AUTH_SECRET_MISSING");
+  return secret;
+}
+
+const studySessionMessages: Record<StudySessionErrorCode, string> = {
+  AUTH_SECRET_MISSING: "La sesión segura no está configurada en el servidor.",
+  INVALID_START_TOKEN: "No se pudo validar el inicio de la sesión.",
+  START_TOKEN_USER_MISMATCH: "La sesión no pertenece a tu cuenta.",
+  START_TOKEN_REQUEST_MISMATCH: "La petición de sesión no es válida.",
+  START_TOKEN_PLAN_MISMATCH: "La duración de la sesión ha cambiado; vuelve a empezar.",
+  STUDY_START_IN_FUTURE: "La sesión no puede empezar en el futuro.",
+  STUDY_SESSION_TOO_SHORT: "La sesión debe durar al menos un minuto.",
+  STUDY_SESSION_TOO_LONG: "La sesión ha superado la duración planificada.",
+  STUDY_MINUTES_EXCEED_ELAPSED: "Los minutos indicados superan el tiempo medido por el servidor.",
+  STUDY_MINUTES_EXCEED_PLAN: "Los minutos indicados superan la duración planificada.",
+};
+
+function studySessionError(error: unknown): StudySessionActionState {
+  const code = error instanceof StudySessionError ? error.code : "INVALID_START_TOKEN";
+  return { error: studySessionMessages[code] };
+}
+
+function isStudySessionDuplicate(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002" && String(error.meta?.target ?? "").includes("requestId");
 }
 
 async function ensureOwnedSubject(userId: string, subjectId: string | null) {
@@ -123,7 +157,7 @@ export async function createTask(formData: FormData) {
   const userId = await requireUserId();
   const data = taskSchema.parse(formObject(formData));
   const subjectId = await ensureOwnedSubject(userId, data.subjectId);
-  await prisma.task.create({ data: { ...data, subjectId, userId } });
+  await prisma.task.create({ data: { ...data, status: data.status === "COMPLETED" ? "PENDING" : data.status, subjectId, userId } });
   revalidatePath("/app");
 }
 
@@ -137,7 +171,7 @@ export async function completeTask(formData: FormData) {
     return applyAcademicPetProgress(tx, userId, GAME_RULES.taskCompletionXp);
   }, { isolationLevel: "Serializable" });
   if (!completed) return;
-  await refreshDailyMissions(userId);
+  await refreshDailyMissionsForUser(userId);
   revalidatePath("/app");
   revalidatePath("/app/pets");
   if (completed.evolved) redirect("/app?notice=pet-evolution");
@@ -198,46 +232,54 @@ export async function deleteGoal(formData: FormData) {
   revalidatePath("/app/goals");
 }
 
-export async function recordStudySession(formData: FormData) {
+export async function startStudySession(plannedMinutes: number): Promise<StudyStartResult> {
   const userId = await requireUserId();
-  const data = studySessionSchema.parse(formObject(formData));
+  const parsed = studySessionStartSchema.safeParse({ plannedMinutes });
+  if (!parsed.success) return { ok: false, error: "La duración de la sesión no es válida." };
+  try {
+    const requestId = randomUUID();
+    const startedAt = new Date();
+    return { ok: true, requestId, startedAt: startedAt.toISOString(), startToken: createStudyStartToken({ userId, requestId, startedAt, plannedMinutes: parsed.data.plannedMinutes }, studyTokenSecret()) };
+  } catch (error) {
+    if (error instanceof StudySessionError) return { ok: false, error: studySessionMessages[error.code] };
+    throw error;
+  }
+}
+
+export async function recordStudySession(_state: StudySessionActionState, formData: FormData): Promise<StudySessionActionState> {
+  const userId = await requireUserId();
+  const parsed = studySessionActionSchema.safeParse(formObject(formData));
+  if (!parsed.success) return { error: "No se pudo validar la sesión. Vuelve a iniciar el temporizador." };
+  const data = parsed.data;
+  let sessionData;
+  try {
+    const start = verifyStudyStartToken(data.startToken, studyTokenSecret(), { userId, requestId: data.requestId, plannedMinutes: data.plannedMinutes });
+    sessionData = validateServerStudySession({ startedAt: start.startedAt, plannedMinutes: start.plannedMinutes, actualMinutes: data.actualMinutes }, new Date());
+  } catch (error) {
+    return studySessionError(error);
+  }
+
   const subjectId = await ensureOwnedSubject(userId, data.subjectId);
   let taskId = data.taskId;
   if (taskId && !(await prisma.task.findFirst({ where: { id: taskId, userId }, select: { id: true } }))) taskId = null;
-  const reward = rewardsForStudyMinutes(data.actualMinutes);
-  const petProgress = await prisma.$transaction(async (tx) => {
-    await tx.studySession.create({ data: { ...data, subjectId, taskId, userId } });
-    await tx.user.update({ where: { id: userId }, data: { xp: { increment: reward.xp }, coins: { increment: reward.coins } } });
-    return applyAcademicPetProgress(tx, userId, reward.xp);
-  }, { isolationLevel: "Serializable" });
-  await refreshDailyMissions(userId);
-  redirect("/app?notice=" + (petProgress.evolved ? "pet-evolution" : petProgress.leveledUp ? "pet-level" : "study-reward"));
-}
-
-export async function refreshDailyMissions(userId: string) {
-  const { start, end } = localDayBounds();
-  const missionDate = dateOnlyForLocalDay(start);
-  await prisma.$transaction(async (tx) => {
-    for (const mission of GAME_RULES.dailyMissions) {
-      await tx.mission.upsert({
-        where: { userId_date_metric: { userId, date: missionDate, metric: mission.metric } },
-        update: {},
-        create: { ...mission, userId, date: missionDate },
-      });
+  const reward = rewardsForStudyMinutes(sessionData.actualMinutes);
+  try {
+    const petProgress = await prisma.$transaction(async (tx) => {
+      await tx.studySession.create({ data: { ...sessionData, requestId: data.requestId, subjectId, taskId, userId } });
+      await tx.user.update({ where: { id: userId }, data: { xp: { increment: reward.xp }, coins: { increment: reward.coins } } });
+      return applyAcademicPetProgress(tx, userId, reward.xp);
+    }, { isolationLevel: "Serializable" });
+    await refreshDailyMissionsForUser(userId);
+    redirect("/app?notice=" + (petProgress.evolved ? "pet-evolution" : petProgress.leveledUp ? "pet-level" : "study-reward"));
+  } catch (error) {
+    if (!isStudySessionDuplicate(error)) throw error;
+    const existing = await prisma.studySession.findFirst({ where: { userId, requestId: data.requestId } });
+    if (!existing || existing.startedAt.getTime() !== sessionData.startedAt.getTime() || existing.plannedMinutes !== sessionData.plannedMinutes || existing.subjectId !== subjectId || existing.taskId !== taskId) {
+      return { error: "La misma petición se ha usado con datos diferentes." };
     }
-    const [minutes, completed] = await Promise.all([
-      tx.studySession.aggregate({ where: { userId, startedAt: { gte: start, lt: end } }, _sum: { actualMinutes: true } }),
-      tx.task.count({ where: { userId, completedAt: { gte: start, lt: end } } }),
-    ]);
-    const progressByMetric = { STUDY_MINUTES: minutes._sum.actualMinutes ?? 0, TASKS_COMPLETED: completed };
-    for (const mission of GAME_RULES.dailyMissions) {
-      const current = await tx.mission.findUniqueOrThrow({ where: { userId_date_metric: { userId, date: missionDate, metric: mission.metric } } });
-      const progress = progressByMetric[mission.metric];
-      const becameComplete = !current.isComplete && progress >= current.target;
-      await tx.mission.update({ where: { id: current.id }, data: { progress, isComplete: current.isComplete || becameComplete } });
-      if (becameComplete) await applyAcademicPetProgress(tx, userId, current.rewardXp);
-    }
-  }, { isolationLevel: "Serializable" });
+    await refreshDailyMissionsForUser(userId);
+    return { success: "La sesión ya estaba guardada; no se han repetido las recompensas." };
+  }
 }
 
 function petActionError(error: unknown) {
