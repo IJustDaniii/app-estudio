@@ -46,6 +46,21 @@ enum MaterialProcessingStatus {
   ERROR
 }
 
+enum AIProviderKind {
+  OLLAMA
+}
+
+enum AIMessageRole {
+  USER
+  ASSISTANT
+}
+
+enum AIMessageStatus {
+  PENDING
+  COMPLETE
+  ERROR
+}
+
 model User {
   id            String           @id @default(cuid())
   name          String
@@ -68,6 +83,54 @@ model User {
   missions      Mission[]
   materials     Material[]
   topics        Topic[]
+  aiSettings    AISettings?
+  aiChats       AIChat[]
+  aiMessages    AIMessage[]
+}
+
+model AISettings {
+  userId                   String         @id
+  user                     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider                 AIProviderKind @default(OLLAMA)
+  ollamaUrl                String         @default("http://127.0.0.1:11434")
+  model                    String         @default("qwen3.5:9b")
+  isAcademicContextEnabled Boolean        @default(true)
+  contextLimit             Int            @default(12000)
+  createdAt                DateTime       @default(now())
+  updatedAt                DateTime       @updatedAt
+}
+
+model AIChat {
+  id        String      @id @default(cuid())
+  title     String      @default("Nuevo chat")
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  AIMessage[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@unique([id, userId])
+  @@index([userId, updatedAt])
+}
+
+model AIMessage {
+  id              String          @id @default(cuid())
+  role            AIMessageRole
+  content         String
+  status          AIMessageStatus @default(COMPLETE)
+  model           String?
+  errorCode       String?
+  contextSnapshot Json?
+  inputTokens     Int?
+  outputTokens    Int?
+  chatId          String
+  userId          String
+  chat            AIChat          @relation(fields: [chatId, userId], references: [id, userId], onDelete: Cascade)
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([userId, chatId, createdAt])
 }
 
 model Subject {

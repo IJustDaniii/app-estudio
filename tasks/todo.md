@@ -1,46 +1,37 @@
-# Tareas
+# Tareas — infraestructura inicial de IA
 
-## Fase 1 — Base
+## Fundación
 
-- [x] Configurar Next.js, TypeScript, Tailwind, shadcn/ui, Vitest y PWA.
-  - Aceptación: la shell compila y el manifest/service worker están disponibles.
-  - Verificación: `npm test`, `npm run typecheck`, `npm run build`.
+- [ ] Contratos `AIProvider`, errores y esquemas Zod.
+  - Aceptación: contrato agnóstico, errores normalizados y límites validados.
+  - Verificación: pruebas unitarias enfocadas y typecheck.
+- [ ] Persistencia Prisma por usuario.
+  - Aceptación: configuración, chats y mensajes con cascadas e índices.
+  - Verificación: `prisma generate` y migración SQL revisada.
 
-- [x] Definir Prisma y autenticación.
-  - Aceptación: schema válido, registro/login protegidos y seed reproducible.
-  - Verificación: `npm run db:generate`, pruebas de validación y build.
+## Proveedor y contexto
 
-## Fase 2 — Núcleo académico
+- [ ] `OllamaProvider` con conexión, capacidades, streaming y timeouts.
+  - Aceptación: NDJSON fragmentado funciona y los fallos se clasifican.
+  - Verificación: pruebas con transporte falso, sin Ollama real.
+- [ ] Constructor de contexto y materiales.
+  - Aceptación: sólo IDs propios seleccionados, límite estricto y soporte de texto/imágenes compatibles.
+  - Verificación: pruebas de inclusión, recorte, aislamiento y errores de extracción.
+- [ ] Herramientas de lectura y capa de propuestas.
+  - Aceptación: tareas, Bosses, notas y asignaturas son consultables; ninguna escritura puede ejecutarse.
+  - Verificación: pruebas del registro y permisos.
 
-- [x] Implementar asignaturas y horario editables.
-  - Aceptación: crear/eliminar asignaturas y franjas propias.
-  - Verificación: validación, tipos y revisión manual.
+## Producto
 
-- [x] Implementar tareas, calendario, Bosses, notas y objetivos.
-  - Aceptación: CRUD básico persistente y separación fija/flexible.
-  - Verificación: pruebas de dominio, tipos y revisión manual.
+- [ ] APIs autenticadas de ajustes, chats y mensajes.
+  - Aceptación: CRUD, streaming persistente, validación y errores consistentes.
+  - Verificación: typecheck y pruebas de servicios/orquestación.
+- [ ] Interfaz principal IA responsive y accesible.
+  - Aceptación: nuevo chat, cambio, renombrado, borrado, streaming, selector de contexto, materiales y ajustes.
+  - Verificación: navegador en escritorio y móvil, sin errores de consola.
 
-## Fase 2 — Materiales/Archivos
+## Cierre
 
-- [x] Implementar subida privada múltiple, validación de firma, SHA-256, asociaciones académicas, paginación y almacenamiento local fuera de `public/`.
-  - Verificación: límites por archivo/lote, duplicados, aislamiento, referencias cruzadas, limpieza compensatoria, tests, lint, tipos y build.
-
-## Fase 3 — Estudio y progreso
-
-- [x] Implementar temporizador y sesiones.
-  - Aceptación: iniciar, pausar y finalizar registrando duración.
-  - Verificación: pruebas, tipos y revisión manual.
-
-- [x] Implementar progreso, misiones y estadísticas.
-  - Aceptación: métricas visibles con reglas provisionales centralizadas.
-  - Verificación: pruebas unitarias y build.
-
-## Fase 4 — Dashboard y cierre
-
-- [x] Implementar dashboard y “¿Qué hago ahora?”.
-  - Aceptación: información de hoy completa y recomendación explicable.
-  - Verificación: tests de heurística y revisión en navegador.
-
-- [x] Verificación final y documentación.
-  - Aceptación: test, lint, tipos, build, audit y navegador sin errores conocidos.
-  - Verificación: ejecutar todos los comandos documentados.
+- [ ] Documentación y controles finales.
+  - Verificación: `npm test`, `npm run lint`, `npm run typecheck`, `npm run build`, `npm audit`.
+- [ ] Commit en `main` y push a `origin/main`.

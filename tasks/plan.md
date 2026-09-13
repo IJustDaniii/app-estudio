@@ -1,32 +1,39 @@
-# Plan de implementación
+# Plan de implementación: infraestructura inicial de IA
 
-## Fase 2 — Materiales/Archivos
+## Objetivo
 
-La primera parte de la Fase 2 incluye Materiales/Archivos privados, temas/unidades, validación de contenido y almacenamiento local. R2 e IA quedan como puntos de extensión futuros.
+Añadir chat de IA local mediante Ollama sin acoplar el resto de la aplicación al proveedor, con persistencia por usuario, streaming, contexto académico explícito y acotado, materiales existentes y herramientas iniciales de solo lectura.
 
-## Arquitectura
+## Decisiones de arquitectura
 
-- App Router con Server Components y Server Actions para reducir superficie de API.
-- PostgreSQL con Prisma; cada entidad académica pertenece a un usuario.
-- Auth.js Credentials con JWT persistente y contraseñas bcrypt.
-- Reglas provisionales puras en `src/lib/config` y `src/lib/domain`.
-- Service worker mínimo: shell estático y fallback offline, sin prometer datos mutables offline.
+- `AIProvider` define el contrato independiente del proveedor; `OllamaProvider` implementa la API REST local y transforma NDJSON en eventos internos.
+- Todas las llamadas a Ollama pasan por Route Handlers de Node. La URL configurable se valida como HTTP de loopback para impedir SSRF.
+- La configuración, chats y mensajes pertenecen a un usuario. Todas las consultas vuelven a comprobar `userId` en el servidor.
+- El contexto sólo contiene IDs seleccionados explícitamente. El backend recupera campos permitidos, aplica límites y registra una instantánea mínima en el mensaje.
+- Los materiales se leen desde `StorageProvider`; el texto se extrae con límites de bytes/caracteres y las imágenes sólo se envían tras confirmar capacidad `vision` del modelo.
+- Las herramientas iniciales consultan asignaturas, tareas, Bosses y notas. El contrato de futuras escrituras exige propuesta y confirmación, sin ejecutar mutaciones en esta fase.
+- Los errores de Ollama son estados recuperables del chat y no afectan a ninguna otra ruta de la aplicación.
 
-## Orden
+## Tareas
 
-1. Base del proyecto, diseño, PWA y controles de calidad.
-2. Modelo Prisma, autenticación y seed.
-3. Áreas académicas y calendario.
-4. Temporizador, progreso y estadísticas.
-5. Dashboard y heurística.
-6. Verificación integral y documentación.
+1. Definir contratos, errores, validación y modelos Prisma de IA.
+2. Implementar y probar `OllamaProvider`, streaming, timeouts y detección de capacidades.
+3. Implementar y probar construcción de contexto, extracción de texto/materiales y herramientas de lectura.
+4. Implementar APIs autenticadas para configuración, chats, mensajes y streaming persistente.
+5. Construir la sección principal IA, selector explícito de contexto y ajustes integrados en el diseño actual.
+6. Actualizar documentación y ejecutar pruebas, lint, typecheck, build, audit y verificación de navegador.
 
-## Riesgos
+## Riesgos y mitigaciones
 
 | Riesgo | Mitigación |
 | --- | --- |
-| PostgreSQL no disponible en la máquina | Verificar schema/build sin conexión y documentar `DATABASE_URL`; probar UI pública localmente. |
-| Alcance amplio | Mantener CRUD compacto, sin automatizaciones o reglas no pedidas. |
-| Offline con datos autenticados | Cachear solo shell/recursos seguros; dejar sincronización de mutaciones fuera de alcance. |
-| Reglas de juego sin definir | Centralizar constantes provisionales y cubrirlas con pruebas. |
+| Ollama apagado, lento o sin modelo | Timeouts, abortos, códigos de error estables y UI reintentable. |
+| Fuga entre usuarios | Filtros `userId` obligatorios y pruebas de contexto con IDs ajenos. |
+| Prompt injection en materiales | Los materiales se etiquetan como datos no confiables y las herramientas sólo permiten lectura. |
+| Archivos grandes o malformados | Tipos permitidos, límites de bytes/caracteres y fallos aislados por material. |
+| URL configurable usada como SSRF | Sólo `http://localhost`, `127.0.0.1` o `[::1]`, sin credenciales ni rutas arbitrarias. |
+| Respuesta interrumpida | Mensaje asistente con estado de error y conversación reutilizable. |
 
+## Fuera de alcance
+
+Embeddings, búsqueda semántica, RAG, flashcards, repetición espaciada, tests automáticos, análisis de exámenes, Teams y cualquier escritura automática o destructiva sobre datos académicos.
