@@ -28,6 +28,18 @@ describe("repositorio de contexto académico", () => {
     expect(taskFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ userId: "user-a" }) }));
   });
 
+  it("no incluye tareas ni Bosses pasados cuando la herramienta pide próximos elementos", async () => {
+    taskFindMany.mockResolvedValue([]);
+    bossFindMany.mockResolvedValue([]);
+    const now = new Date("2026-09-13T10:00:00.000Z");
+    const repository = scopedReadOnlyToolRepository(emptyContextSelection, undefined, 20, [], "Europe/Madrid", now);
+    await repository.tasks("user-a", { limit: 5 });
+    await repository.bosses("user-a", { limit: 5 });
+
+    expect(taskFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ dueDate: expect.objectContaining({ gte: now }) }) }));
+    expect(bossFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ date: expect.objectContaining({ gte: now }) }) }));
+  });
+
   it("serializa la misma forma completa que el contexto adaptativo", async () => {
     taskFindMany.mockResolvedValue([{
       id: "task-a",

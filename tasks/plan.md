@@ -2,14 +2,14 @@
 
 ## Objetivo
 
-Añadir chat de IA local mediante Ollama sin acoplar el resto de la aplicación al proveedor, con persistencia por usuario, streaming, contexto académico explícito y acotado, materiales existentes y herramientas iniciales de solo lectura.
+Añadir chat de IA local mediante Ollama sin acoplar el resto de la aplicación al proveedor, con persistencia por usuario, streaming, contexto académico automático y acotado, materiales existentes y herramientas iniciales de solo lectura.
 
 ## Decisiones de arquitectura
 
 - `AIProvider` define el contrato independiente del proveedor; `OllamaProvider` implementa la API REST local y transforma NDJSON en eventos internos.
 - Todas las llamadas a Ollama pasan por Route Handlers de Node. La URL configurable se valida como HTTP de loopback para impedir SSRF.
 - La configuración, chats y mensajes pertenecen a un usuario. Todas las consultas vuelven a comprobar `userId` en el servidor.
-- El contexto sólo contiene IDs seleccionados explícitamente. El backend recupera campos permitidos, aplica límites y registra una instantánea mínima en el mensaje.
+- El contexto consulta automáticamente las categorías autorizadas cuando procede; el backend recupera campos permitidos, aplica límites y la selección manual sólo prioriza IDs concretos. Registra una instantánea mínima en el mensaje.
 - Los materiales se leen desde `StorageProvider`; el texto se extrae con límites de bytes/caracteres y las imágenes sólo se envían tras confirmar capacidad `vision` del modelo.
 - Las herramientas iniciales consultan asignaturas, tareas, Bosses y notas. El contrato de futuras escrituras exige propuesta y confirmación, sin ejecutar mutaciones en esta fase.
 - Los errores de Ollama son estados recuperables del chat y no afectan a ninguna otra ruta de la aplicación.

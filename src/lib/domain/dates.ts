@@ -33,7 +33,7 @@ function calendarParts(date: Date, timeZone: string): CalendarParts {
   return { year: value("year"), month: value("month"), day: value("day"), hour: value("hour"), minute: value("minute"), second: value("second") };
 }
 
-function utcFromCalendarParts(parts: CalendarParts, timeZone: string) {
+export function zonedCalendarStart(parts: CalendarParts, timeZone = DEFAULT_TIME_ZONE) {
   const wallTime = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
   let candidate = wallTime;
   for (let attempt = 0; attempt < 4; attempt += 1) {
@@ -57,12 +57,27 @@ export function zonedDayOfWeek(date: Date, timeZone = DEFAULT_TIME_ZONE) {
 export function zonedDayStart(date: Date, timeZone = DEFAULT_TIME_ZONE, dayOffset = 0) {
   const parts = calendarParts(date, timeZone);
   const wallDate = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + dayOffset));
-  return utcFromCalendarParts({ year: wallDate.getUTCFullYear(), month: wallDate.getUTCMonth() + 1, day: wallDate.getUTCDate(), hour: 0, minute: 0, second: 0 }, timeZone);
+  return zonedCalendarStart({ year: wallDate.getUTCFullYear(), month: wallDate.getUTCMonth() + 1, day: wallDate.getUTCDate(), hour: 0, minute: 0, second: 0 }, timeZone);
 }
 
 export function zonedDayRange(date: Date, timeZone = DEFAULT_TIME_ZONE, daysBefore = 0, daysAfter = 0) {
   const start = zonedDayStart(date, timeZone, -daysBefore);
   const end = zonedDayStart(date, timeZone, daysAfter + 1);
+  return { start, end };
+}
+
+export function zonedWeekRange(date: Date, timeZone = DEFAULT_TIME_ZONE) {
+  const day = zonedDayOfWeek(date, timeZone);
+  const start = zonedDayStart(date, timeZone, 1 - day);
+  const end = zonedDayStart(date, timeZone, 8 - day);
+  return { start, end };
+}
+
+export function zonedMonthRange(date: Date, timeZone = DEFAULT_TIME_ZONE) {
+  const [year, month] = zonedDateKey(date, timeZone).split("-").map(Number);
+  const start = zonedCalendarStart({ year, month, day: 1, hour: 0, minute: 0, second: 0 }, timeZone);
+  const next = month === 12 ? { year: year + 1, month: 1 } : { year, month: month + 1 };
+  const end = zonedCalendarStart({ ...next, day: 1, hour: 0, minute: 0, second: 0 }, timeZone);
   return { start, end };
 }
 

@@ -32,16 +32,18 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (!userId) return aiApiError("UNAUTHORIZED", "No autorizado", 401);
   const rate = checkAIRateLimit(`messages:send:${userId}`, 12);
   if (!rate.allowed) return aiRateLimitError(rate.retryAfterSeconds);
-  const chatId = chatIdSchema.safeParse((await context.params).id).data;
-  if (!chatId) return aiApiError("NOT_FOUND", "Chat no encontrado", 404);
+  const requestedChatId = (await context.params).id;
+  const isNewChat = requestedChatId === "new";
+  const chatId = isNewChat ? null : chatIdSchema.safeParse(requestedChatId).data;
+  if (!isNewChat && !chatId) return aiApiError("NOT_FOUND", "Chat no encontrado", 404);
 
   try {
     const data = await parseAIJson(request, sendMessageSchema);
-    const [chat, settings] = await Promise.all([
-      prisma.aIChat.findFirst({ where: { id: chatId, userId }, select: { id: true, title: true } }),
+    const [existingChat, settings] = await Promise.all([
+      chatId ? prisma.aIChat.findFirst({ where: { id: chatId, userId }, select: { id: true, title: true } }) : Promise.resolve(null),
       getAISettings(userId),
     ]);
-    if (!chat) return aiApiError("NOT_FOUND", "Chat no encontrado", 404);
+    if (!isNewChat && !existingChat) return aiApiError("NOT_FOUND", "Chat no encontrado", 404);
     if (!settings.isAIEnabled) return aiApiError("AI_DISABLED", "La IA está desactivada en tus ajustes.", 403);
     const contextEnabled = settings.isAcademicContextEnabled && data.usePersonalContext;
     const timeZone = contextEnabled ? await getUserTimezone(userId) : DEFAULT_TIME_ZONE;
@@ -57,7 +59,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const selection = effectiveContextSelection(contextEnabled, data.context, permissions, settings.maxItemsPerCategory);
 
     const [historyDesc, academicContext] = await Promise.all([
-      prisma.aIMessage.findMany({ where: { chatId, userId, status: "COMPLETE" }, select: { role: true, content: true }, orderBy: { createdAt: "desc" }, take: 40 }),
+      chatId ? prisma.aIMessage.findMany({ where: { chatId, userId, status: "COMPLETE" }, select: { role: true, content: true }, orderBy: { createdAt: "desc" }, take: 40 }) : Promise.resolve([]),
       buildAcademicContext({
         userId,
         isEnabled: settings.isAcademicContextEnabled,
@@ -70,7 +72,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         timeZone,
         now,
         repository: academicContextRepository,
-        loadMaterial: (storageKey) => getStorageProvider().get(storageKey),
+        loadMaterial: (storageKey, signal) => getStorageProvider().get(storageKey, signal),
       }),
     ]);
 
@@ -78,12 +80,29 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const availableTools = contextEnabled ? toolDefinitionsForPermissions(permissions, plan.categories, plan.toolNames) : [];
     const snapshotData = { ...academicContext.snapshot, selection: academicContext.selection, warnings: academicContext.warnings };
     const snapshot = snapshotData as Prisma.InputJsonValue;
-    const shouldRename = chat.title === "Nuevo chat" && historyDesc.length === 0;
-    const [userMessage, assistantMessage] = await prisma.$transaction([
-      prisma.aIMessage.create({ data: { chatId, userId, role: "USER", content: data.content, status: "COMPLETE", contextSnapshot: snapshot }, select: { id: true, role: true, content: true, status: true, createdAt: true } }),
-      prisma.aIMessage.create({ data: { chatId, userId, role: "ASSISTANT", content: "", status: "PENDING", model: settings.model, contextSnapshot: snapshot }, select: { id: true, role: true, content: true, status: true, model: true, errorCode: true, contextSnapshot: true, createdAt: true } }),
-      prisma.aIChat.update({ where: { id: chatId }, data: { ...(shouldRename ? { title: defaultChatTitle(data.content) } : {}), updatedAt: new Date() } }),
-    ]);
+    let chat = existingChat;
+    let userMessage: { id: string; role: string; content: string; status: string; createdAt: Date };
+    let assistantMessage: { id: string; role: string; content: string; status: string; model: string | null; errorCode: string | null; contextSnapshot: Prisma.JsonValue | null; createdAt: Date };
+    if (isNewChat) {
+      const created = await prisma.$transaction(async (transaction) => {
+        const newChat = await transaction.aIChat.create({ data: { userId, title: defaultChatTitle(data.content) }, select: { id: true, title: true, createdAt: true, updatedAt: true } });
+        const userMessage = await transaction.aIMessage.create({ data: { chatId: newChat.id, userId, role: "USER", content: data.content, status: "COMPLETE", contextSnapshot: snapshot }, select: { id: true, role: true, content: true, status: true, createdAt: true } });
+        const assistantMessage = await transaction.aIMessage.create({ data: { chatId: newChat.id, userId, role: "ASSISTANT", content: "", status: "PENDING", model: settings.model, contextSnapshot: snapshot }, select: { id: true, role: true, content: true, status: true, model: true, errorCode: true, contextSnapshot: true, createdAt: true } });
+        return { chat: newChat, userMessage, assistantMessage };
+      });
+      chat = created.chat;
+      userMessage = created.userMessage;
+      assistantMessage = created.assistantMessage;
+    } else {
+      const shouldRename = existingChat!.title === "Nuevo chat" && historyDesc.length === 0;
+      const [createdUserMessage, createdAssistantMessage] = await prisma.$transaction([
+        prisma.aIMessage.create({ data: { chatId: chatId!, userId, role: "USER", content: data.content, status: "COMPLETE", contextSnapshot: snapshot }, select: { id: true, role: true, content: true, status: true, createdAt: true } }),
+        prisma.aIMessage.create({ data: { chatId: chatId!, userId, role: "ASSISTANT", content: "", status: "PENDING", model: settings.model, contextSnapshot: snapshot }, select: { id: true, role: true, content: true, status: true, model: true, errorCode: true, contextSnapshot: true, createdAt: true } }),
+        prisma.aIChat.update({ where: { id: chatId! }, data: { ...(shouldRename ? { title: defaultChatTitle(data.content) } : {}), updatedAt: new Date() } }),
+      ]);
+      userMessage = createdUserMessage as typeof userMessage;
+      assistantMessage = createdAssistantMessage as typeof assistantMessage;
+    }
 
     const encoder = new TextEncoder();
     const provider = getAIProvider(settings.provider);
@@ -97,7 +116,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         const warnings = [...academicContext.warnings];
         const addWarning = (warning: string) => { if (!warnings.includes(warning)) warnings.push(warning); };
         const send = (event: unknown) => controller.enqueue(encoder.encode(streamLine(event)));
-        send({ type: "meta", userMessage, assistantMessage, context: snapshotData, warnings });
+        send({ type: "meta", chat, userMessage, assistantMessage, context: snapshotData, warnings });
         try {
           let images = academicContext.images.map((image) => image.base64);
           let supportsTools = false;
@@ -141,7 +160,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
             } else usage = event.usage;
           }
           const completed = await prisma.aIMessage.update({ where: { id: assistantMessage.id }, data: { content: assistantContent, status: "COMPLETE", inputTokens: usage?.inputTokens, outputTokens: usage?.outputTokens, contextSnapshot: { ...snapshotData, warnings } as Prisma.InputJsonValue }, select: { id: true, role: true, content: true, status: true, model: true, errorCode: true, contextSnapshot: true, createdAt: true } });
-          await prisma.aIChat.update({ where: { id: chatId }, data: { updatedAt: new Date() } });
+          await prisma.aIChat.update({ where: { id: chat!.id }, data: { updatedAt: new Date() } });
           send({ type: "done", message: completed, warnings });
         } catch (error) {
           const safeError = error instanceof AIProviderError ? error : new AIProviderError("PROVIDER_ERROR", { cause: error });

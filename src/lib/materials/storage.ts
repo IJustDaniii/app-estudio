@@ -3,7 +3,7 @@ import path from "node:path";
 
 export interface StorageProvider {
   put(key: string, content: Buffer): Promise<void>;
-  get(key: string): Promise<Buffer>;
+  get(key: string, signal?: AbortSignal): Promise<Buffer>;
   delete(key: string): Promise<void>;
   exists(key: string): Promise<boolean>;
 }
@@ -25,8 +25,8 @@ export class LocalStorageProvider implements StorageProvider {
     await writeFile(target, content, { flag: "wx" });
   }
 
-  async get(key: string) {
-    return readFile(this.resolve(key));
+  async get(key: string, signal?: AbortSignal) {
+    return readFile(this.resolve(key), { signal });
   }
 
   async delete(key: string) {

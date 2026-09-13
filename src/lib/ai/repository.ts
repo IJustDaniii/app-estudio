@@ -1,12 +1,13 @@
 import type { Prisma } from "@prisma/client";
 import { calculateLevel, calculateStudyStreak } from "@/lib/domain/progress";
-import { DEFAULT_TIME_ZONE, normalizeTimeZone, zonedDateKey, zonedDayOfWeek, zonedDayRange, zonedDayStart } from "@/lib/domain/dates";
+import { DEFAULT_TIME_ZONE, normalizeTimeZone, zonedDayStart } from "@/lib/domain/dates";
 import type { AcademicContextRepository, ContextQueryOptions } from "@/lib/ai/context";
 import { serializeBossContext, serializeMaterialMetadata, serializeTaskContext } from "@/lib/ai/serialization";
 import type { ReadOnlyToolRepository } from "@/lib/ai/tools";
 import type { AIAcademicPermissions, ContextSelection } from "@/lib/ai/validation";
 import { aiModelSchema, DEFAULT_AI_CONTEXT_ITEM_LIMIT, DEFAULT_AI_CONTEXT_LIMIT, DEFAULT_AI_MODEL, DEFAULT_OLLAMA_URL, ollamaUrlSchema, defaultAIAcademicPermissions } from "@/lib/ai/validation";
 import { prisma } from "@/lib/prisma";
+import { resolveAcademicTimeRange } from "@/lib/ai/temporal";
 
 function textFilter(query?: string): Prisma.StringFilter | undefined {
   const compact = query?.trim().slice(0, 120);
@@ -22,7 +23,9 @@ function subjectWhere(options: ContextQueryOptions, ids: string[]) {
 }
 
 function dateWhere(from?: Date, to?: Date) {
-  return from || to ? { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } : undefined;
+  // Todos los intervalos del contexto son [inicio, fin): evita duplicados
+  // en fronteras y respeta los cambios de horario de la zona del usuario.
+  return from || to ? { ...(from ? { gte: from } : {}), ...(to ? { lt: to } : {}) } : undefined;
 }
 
 export const academicContextRepository: AcademicContextRepository = {
@@ -85,11 +88,11 @@ export const academicContextRepository: AcademicContextRepository = {
     const now = options.to ?? new Date();
     const timeZone = options.timeZone ?? DEFAULT_TIME_ZONE;
     const from = options.from ?? zonedDayStart(now, timeZone, -7);
-    const missionFrom = new Date(`${zonedDateKey(from, timeZone)}T00:00:00.000Z`);
-    const missionTo = new Date(`${zonedDateKey(now, timeZone)}T23:59:59.999Z`);
+    const missionFrom = zonedDayStart(from, timeZone);
+    const missionTo = zonedDayStart(now, timeZone, 1);
     const [user, missions, sessions] = await Promise.all([
       prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { xp: true, coins: true } }),
-      prisma.mission.findMany({ where: { userId, date: { gte: missionFrom, lte: missionTo } }, select: { title: true, progress: true, target: true, isComplete: true, rewardXp: true, rewardCoins: true }, orderBy: { date: "desc" }, take: options.limit }),
+      prisma.mission.findMany({ where: { userId, date: { gte: missionFrom, lt: missionTo } }, select: { title: true, progress: true, target: true, isComplete: true, rewardXp: true, rewardCoins: true }, orderBy: { date: "desc" }, take: options.limit }),
       prisma.studySession.findMany({ where: { userId }, select: { startedAt: true }, orderBy: { startedAt: "desc" }, take: 370 }),
     ]);
     const level = calculateLevel(user.xp);
@@ -114,18 +117,24 @@ function toolLimit(limit: number, maxItemsPerCategory: number) {
 
 export function scopedReadOnlyToolRepository(selection: ContextSelection, permissions: AIAcademicPermissions = defaultAIAcademicPermissions, maxItemsPerCategory = DEFAULT_AI_CONTEXT_ITEM_LIMIT, scopeSubjectIds: string[] = [], timeZone = DEFAULT_TIME_ZONE, now = new Date()): ReadOnlyToolRepository {
   const limit = (requested: number) => toolLimit(requested, maxItemsPerCategory);
+  const requestedRange = (query?: string) => resolveAcademicTimeRange(query ?? "", now, timeZone);
+  const upcomingRange = (query?: string) => {
+    if (!query?.trim()) return { start: now, end: zonedDayStart(now, timeZone, 30) };
+    const range = requestedRange(query);
+    return { start: range.start.getTime() > now.getTime() ? range.start : now, end: range.end };
+  };
   const subjects = (userId: string, args: { query?: string; limit: number }) => selection.topicIds.length ? Promise.resolve([]) : prisma.subject.findMany({ where: { userId, ...(selection.subjectIds.length ? { id: { in: selection.subjectIds } } : scopeSubjectIds.length ? { id: { in: scopeSubjectIds } } : {}), name: textFilter(args.query) }, select: { id: true, name: true, color: true }, orderBy: { name: "asc" }, take: limit(args.limit) });
   return {
     subjects,
     topics: async (userId, args) => selection.subjectIds.length && !selection.topicIds.length ? [] : academicContextRepository.topics!(userId, selection.topicIds, { query: args.query, limit: limit(args.limit), subjectIds: selection.topicIds.length ? undefined : scopedSubjectIds(selection, scopeSubjectIds), timeZone }),
-    tasks: async (userId, args) => permissions.canReadTasksAndBosses ? (await academicContextRepository.tasks(userId, selection.taskIds, { query: args.query, limit: limit(args.limit), subjectIds: selection.taskIds.length ? undefined : scopedSubjectIds(selection, scopeSubjectIds, args.subjectId), timeZone })).map((task) => serializeTaskContext(task, timeZone)) : [],
-    bosses: async (userId, args) => permissions.canReadTasksAndBosses ? (await academicContextRepository.bosses(userId, selection.bossIds, { query: args.query, limit: limit(args.limit), subjectIds: selection.bossIds.length ? undefined : scopedSubjectIds(selection, scopeSubjectIds, args.subjectId), timeZone })).map((boss) => serializeBossContext(boss, timeZone)) : [],
+    tasks: async (userId, args) => permissions.canReadTasksAndBosses ? (await academicContextRepository.tasks(userId, selection.taskIds, { query: args.query, limit: limit(args.limit), subjectIds: selection.taskIds.length ? undefined : scopedSubjectIds(selection, scopeSubjectIds, args.subjectId), from: selection.taskIds.length ? undefined : upcomingRange(args.query).start, to: selection.taskIds.length ? undefined : upcomingRange(args.query).end, onlyOpen: !selection.taskIds.length, timeZone })).map((task) => serializeTaskContext(task, timeZone)) : [],
+    bosses: async (userId, args) => permissions.canReadTasksAndBosses ? (await academicContextRepository.bosses(userId, selection.bossIds, { query: args.query, limit: limit(args.limit), subjectIds: selection.bossIds.length ? undefined : scopedSubjectIds(selection, scopeSubjectIds, args.subjectId), from: selection.bossIds.length ? undefined : upcomingRange(args.query).start, to: selection.bossIds.length ? undefined : upcomingRange(args.query).end, timeZone })).map((boss) => serializeBossContext(boss, timeZone)) : [],
     goals: async (userId, args) => permissions.canReadTasksAndBosses ? academicContextRepository.goals!(userId, selection.goalIds, { query: args.query, limit: limit(args.limit), timeZone }) : [],
     grades: async (userId, args) => permissions.canReadGrades ? academicContextRepository.grades(userId, selection.gradeIds, { query: args.query, limit: limit(args.limit), subjectIds: selection.gradeIds.length ? undefined : scopedSubjectIds(selection, scopeSubjectIds, args.subjectId), timeZone }) : [],
-    studySessions: async (userId, args) => permissions.canReadSessionsAndStatistics ? academicContextRepository.studySessions(userId, selection.studySessionIds, { limit: limit(args.limit), subjectIds: selection.studySessionIds.length ? undefined : scopedSubjectIds(selection, scopeSubjectIds, args.subjectId), timeZone }) : [],
-    statistics: (userId, args) => permissions.canReadSessionsAndStatistics ? academicContextRepository.statistics!(userId, { limit: limit(args.limit), from: zonedDayStart(now, timeZone, -14), to: now, timeZone }) : Promise.resolve({}),
-    schedule: (userId, args) => permissions.canReadSchedule ? academicContextRepository.schedule!(userId, { limit: limit(args.limit), dayOfWeek: zonedDayOfWeek(now, timeZone), timeZone }) : Promise.resolve([]),
-    calendar: (userId, args) => permissions.canReadSchedule && permissions.canReadTasksAndBosses ? academicContextRepository.calendar!(userId, { limit: limit(args.limit), ...zonedDayRange(now, timeZone, 0, 30), timeZone }) : Promise.resolve([]),
+    studySessions: async (userId, args) => permissions.canReadSessionsAndStatistics ? academicContextRepository.studySessions(userId, selection.studySessionIds, { limit: limit(args.limit), subjectIds: selection.studySessionIds.length ? undefined : scopedSubjectIds(selection, scopeSubjectIds, args.subjectId), from: selection.studySessionIds.length ? undefined : requestedRange(args.query).start, to: selection.studySessionIds.length ? undefined : requestedRange(args.query).end, timeZone }) : [],
+    statistics: (userId, args) => permissions.canReadSessionsAndStatistics ? academicContextRepository.statistics!(userId, { limit: limit(args.limit), ...requestedRange(args.query), timeZone }) : Promise.resolve({}),
+    schedule: (userId, args) => permissions.canReadSchedule ? academicContextRepository.schedule!(userId, { limit: limit(args.limit), timeZone }) : Promise.resolve([]),
+    calendar: (userId, args) => permissions.canReadSchedule && permissions.canReadTasksAndBosses ? academicContextRepository.calendar!(userId, { limit: limit(args.limit), ...upcomingRange(args.query), timeZone }) : Promise.resolve([]),
     materials: async (userId, args) => permissions.canReadMaterials ? (await academicContextRepository.materials(userId, selection.materialIds, { query: args.query, limit: limit(args.limit), subjectIds: selection.materialIds.length ? undefined : scopedSubjectIds(selection, scopeSubjectIds, args.subjectId), timeZone })).map(serializeMaterialMetadata) : [],
     gamification: (userId, args) => permissions.canReadGamification ? academicContextRepository.gamification!(userId, { limit: limit(args.limit), from: zonedDayStart(now, timeZone, -7), to: now, timeZone }) : Promise.resolve({}),
   };

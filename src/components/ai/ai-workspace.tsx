@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { effectiveContextSelection, emptyContextSelection } from "@/lib/ai/validation";
 
 type StreamEvent =
-  | { type: "meta"; userMessage: ChatMessage; assistantMessage: ChatMessage; warnings: string[] }
+  | { type: "meta"; chat?: ChatSummary; userMessage: ChatMessage; assistantMessage: ChatMessage; warnings: string[] }
   | { type: "delta"; content: string }
   | { type: "warning"; warnings: string[] }
   | { type: "done"; message: ChatMessage; warnings: string[] }
@@ -61,6 +61,7 @@ export function AIWorkspace({ initialChats, initialChatPagination, initialActive
   const [notice, setNotice] = useState("");
   const checkedInitialConnection = useRef(false);
   const contextOptionsRequest = useRef(0);
+  const sending = useRef(false);
 
   useEffect(() => {
     if (checkedInitialConnection.current) return;
@@ -68,16 +69,10 @@ export function AIWorkspace({ initialChats, initialChatPagination, initialActive
     void connectionFor(initialSettings).then(setConnection);
   }, [initialSettings]);
 
-  async function createChat() {
-    setBusy(true); setNotice("");
-    try {
-      const response = await fetch("/api/ai/chats", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-      if (!response.ok) throw new Error(await errorMessage(response));
-      const chat = await response.json() as ChatSummary;
-      setChats((current) => [chat, ...current]); setActiveId(chat.id); setMessages([]); setMessagePagination({ page: 1, pageSize: 50, totalItems: 0, totalPages: 0, hasPrevious: false, hasNext: false }); setSelection(emptyContextSelection); setUsePersonalContext(true);
-      window.history.replaceState(null, "", `/app/ai?chat=${chat.id}`);
-    } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo crear el chat."); }
-    finally { setBusy(false); }
+  function createChat() {
+    // "Nuevo" sólo prepara la vista: no deja conversaciones vacías en la base.
+    setActiveId(null); setMessages([]); setMessagePagination({ page: 1, pageSize: 50, totalItems: 0, totalPages: 0, hasPrevious: false, hasNext: false }); setSelection(emptyContextSelection); setUsePersonalContext(true); setNotice("");
+    window.history.replaceState(null, "", "/app/ai");
   }
 
   async function selectChat(id: string) {
@@ -194,20 +189,13 @@ export function AIWorkspace({ initialChats, initialChatPagination, initialActive
     finally { setUploading(false); }
   }
 
-  async function ensureChat() {
-    if (activeId) return activeId;
-    const response = await fetch("/api/ai/chats", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-    if (!response.ok) throw new Error(await errorMessage(response));
-    const chat = await response.json() as ChatSummary;
-    setChats((current) => [chat, ...current]); setActiveId(chat.id); setUsePersonalContext(true); window.history.replaceState(null, "", `/app/ai?chat=${chat.id}`);
-    return chat.id;
-  }
-
   async function sendMessage(content: string) {
+    if (sending.current) return;
+    sending.current = true;
     setBusy(true); setNotice("");
     let assistantId = "";
     try {
-      const chatId = await ensureChat();
+      const chatId = activeId ?? "new";
       const context = settings.isAcademicContextEnabled && usePersonalContext ? effectiveContextSelection(true, selection, settings, settings.maxItemsPerCategory) : emptyContextSelection;
       const response = await fetch(`/api/ai/chats/${chatId}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content, context, usePersonalContext }) });
       if (!response.ok || !response.body) throw new Error(await errorMessage(response));
@@ -218,7 +206,7 @@ export function AIWorkspace({ initialChats, initialChatPagination, initialActive
         for (const line of lines) {
           if (!line.trim()) continue;
           const event = JSON.parse(line) as StreamEvent;
-          if (event.type === "meta") { assistantId = event.assistantMessage.id; setMessages((current) => [...current, event.userMessage, event.assistantMessage]); }
+          if (event.type === "meta") { assistantId = event.assistantMessage.id; if (event.chat) { setChats((current) => [event.chat!, ...current]); setActiveId(event.chat.id); window.history.replaceState(null, "", `/app/ai?chat=${event.chat.id}`); } setMessages((current) => [...current, event.userMessage, event.assistantMessage]); }
           else if (event.type === "delta") setMessages((current) => current.map((message) => message.id === assistantId ? { ...message, content: message.content + event.content } : message));
           else if (event.type === "done") { setMessages((current) => current.map((message) => message.id === event.message.id ? event.message : message)); setSelection(emptyContextSelection); }
           else if (event.type === "warning") setNotice(event.warnings.join(" "));
@@ -228,7 +216,7 @@ export function AIWorkspace({ initialChats, initialChatPagination, initialActive
       }
       setChats((current) => current.map((chat) => chat.id === chatId && chat.title === "Nuevo chat" ? { ...chat, title: content.replace(/\s+/g, " ").slice(0, 80), updatedAt: new Date().toISOString() } : chat));
     } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo enviar el mensaje."); }
-    finally { setBusy(false); }
+    finally { sending.current = false; setBusy(false); }
   }
 
   return <section className="mx-auto flex h-[calc(100dvh-5rem)] min-h-[38rem] max-w-[96rem] flex-col px-0 lg:h-screen lg:p-5">

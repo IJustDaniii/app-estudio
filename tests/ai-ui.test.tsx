@@ -43,6 +43,7 @@ describe("interfaz de IA", () => {
       messages: [{ id: "message-context", role: "ASSISTANT", content: "Respuesta", status: "COMPLETE", model: "qwen3.5:9b", createdAt: "2026-09-13T00:00:00.000Z", contextSnapshot: { mode: "personal", intent: "today", used: [{ category: "tasksAndBosses", label: "Tareas, Bosses y objetivos", count: 2 }], blocked: [], included: [], omitted: [], warnings: [] } }],
     }));
     expect(markup).toContain("Contexto usado: Tareas, Bosses y objetivos (2)");
+    expect(markup).not.toContain("<details");
   });
 
   it("indica cuando una respuesta se generó sin contexto personal", () => {
