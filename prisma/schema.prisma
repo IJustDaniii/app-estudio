@@ -264,6 +264,7 @@ model Subject {
   topics           Topic[]
   materials        Material[]
   timetableChanges TimetableChange[]
+  goals            Goal[]
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 
@@ -374,12 +375,15 @@ model Goal {
   targetDate DateTime?
   progress   Int          @default(0)
   isComplete Boolean      @default(false)
+  subjectId  String?
+  subject    Subject?     @relation(fields: [subjectId], references: [id], onDelete: SetNull)
   userId     String
   user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
 
   @@index([userId, isComplete])
+  @@index([userId, subjectId])
 }
 
 model StudySession {

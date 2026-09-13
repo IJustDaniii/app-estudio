@@ -37,7 +37,9 @@ describe("validación del núcleo académico", () => {
   });
 
   it("clasifica los objetivos y conserva el estado del Boss", () => {
-    expect(goalSchema.safeParse({ title: "Leer una novela", category: "PERSONAL", targetDate: "", progress: "0" }).success).toBe(true);
+    const goal = goalSchema.safeParse({ title: "Leer una novela", category: "PERSONAL", subjectId, targetDate: "", progress: "0" });
+    expect(goal.success).toBe(true);
+    if (goal.success) expect(goal.data.subjectId).toBe(subjectId);
     expect(bossSchema.safeParse({ title: "Examen", subjectId, date: "2026-10-01T09:00", topics: "Tema 1", difficulty: "3", preparation: "50", status: "PREPARED", targetGrade: "8", expectedGrade: "7", actualGrade: "" }).success).toBe(true);
   });
 

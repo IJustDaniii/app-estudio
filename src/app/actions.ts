@@ -340,7 +340,8 @@ export async function deleteGrade(formData: FormData) {
 export async function createGoal(formData: FormData) {
   const userId = await requireUserId();
   const data = goalSchema.parse(formObject(formData));
-  await prisma.goal.create({ data: { ...data, isComplete: data.progress === 100, userId } });
+  const subjectId = await ensureOwnedSubject(userId, data.subjectId);
+  await prisma.goal.create({ data: { ...data, subjectId, isComplete: data.progress === 100, userId } });
   revalidatePath("/app/goals");
 }
 
@@ -348,7 +349,8 @@ export async function updateGoalDetails(formData: FormData) {
   const userId = await requireUserId();
   const id = z.string().cuid().parse(String(formData.get("id") ?? ""));
   const data = goalSchema.parse(formObject(formData));
-  await prisma.goal.updateMany({ where: { id, userId }, data: { ...data, isComplete: data.progress === 100 } });
+  const subjectId = await ensureOwnedSubject(userId, data.subjectId);
+  await prisma.goal.updateMany({ where: { id, userId }, data: { ...data, subjectId, isComplete: data.progress === 100 } });
   revalidatePath("/app/goals");
 }
 
