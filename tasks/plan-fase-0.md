@@ -17,27 +17,27 @@ Orden: `reglas-progreso` → `sesiones-seguras` → `recompensas-idempotentes` �
 
 ### 1. Reglas y contratos de dominio
 
-- [ ] Extraer las decisiones de validación de sesiones y el resultado atómico de misiones a funciones pequeñas.
-- [ ] Escribir pruebas que fallen para los límites y los reintentos.
-- [ ] Verificar reglas existentes y centralizar sus nombres.
+- [x] Extraer las decisiones de validación de sesiones y el resultado atómico de misiones a funciones pequeñas.
+- [x] Escribir pruebas para los límites y los reintentos.
+- [x] Verificar reglas existentes y centralizar sus nombres.
 
 ### 2. Sesiones seguras
 
-- [ ] Añadir una marca de inicio firmada por el servidor.
-- [ ] Derivar y comprobar los límites desde la marca de inicio y el reloj del servidor.
-- [ ] Añadir una clave única por usuario y una transacción que guarde y pague una vez.
-- [ ] Adaptar el temporizador para usar el contrato nuevo y mostrar errores comprensibles.
+- [x] Añadir una marca de inicio firmada por el servidor.
+- [x] Derivar y comprobar los límites desde la marca de inicio y el reloj del servidor.
+- [x] Añadir una clave única por usuario y una transacción que guarde y pague una vez.
+- [x] Adaptar el temporizador para usar el contrato nuevo y mostrar errores comprensibles.
 
 ### 3. Recompensas idempotentes
 
-- [ ] Pagar XP y monedas al reclamar una misión únicamente en el cambio atómico a completada.
-- [ ] Mantener la protección de primera finalización de tareas y su transacción.
-- [ ] Usar la zona horaria del usuario para misiones y rachas.
+- [x] Pagar XP y monedas al reclamar una misión únicamente en el cambio atómico a completada.
+- [x] Mantener la protección de primera finalización de tareas y su transacción.
+- [x] Usar la zona horaria del usuario para misiones y rachas.
 
 ### 4. Documentación y cierre
 
-- [ ] Actualizar README y SPEC para retirar contradicciones sobre las reglas actuales.
-- [ ] Registrar la decisión importante en un ADR y añadir notas del parche.
+- [x] Actualizar README y SPEC para retirar contradicciones sobre las reglas actuales.
+- [x] Registrar la decisión importante en un ADR y añadir notas del parche.
 - [ ] Ejecutar todas las comprobaciones y revisar el diff final.
 
 ## Puntos de control

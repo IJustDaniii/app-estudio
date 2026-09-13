@@ -68,6 +68,8 @@ npx prisma validate
 npm audit --audit-level=high
 ```
 
+Las reglas activas de XP, monedas, niveles, rachas y misiones, junto con la protección de sesiones y recompensas repetidas, están documentadas en [docs/fase-0-integridad.md](docs/fase-0-integridad.md). Las decisiones importantes de esta fase están en [ADR-002](docs/decisions/ADR-002-integridad-progreso-y-estudio.md).
+
 ## Arquitectura
 
 - Next.js App Router, React y TypeScript estricto.
@@ -82,9 +84,9 @@ Las pautas siguen la documentacion oficial de [Next.js](https://nextjs.org/docs)
 
 ## Decisiones pendientes
 
-- Formulas definitivas de XP, niveles, monedas, racha, dificultad y recompensas.
+- Revisión futura de las cifras provisionales de XP, niveles, monedas, racha y recompensas; las reglas actuales están definidas en la documentación de la Fase 0.
 - Reglas para redistribuir actividades de estudio flexibles.
 - Recuperacion de contrasena, verificacion de email y despliegue.
 - Sincronizacion offline de datos.
 
-No se incluyen mascotas, tienda avanzada, temporadas, Teams, funciones sociales, flashcards ni integraciones externas adicionales.
+Las mascotas, los huevos y la tienda básica pertenecen a la Fase 3 ya existente. No se incluyen tienda avanzada, temporadas, Teams, funciones sociales, flashcards ni integraciones externas adicionales.

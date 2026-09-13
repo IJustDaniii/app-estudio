@@ -10,7 +10,7 @@ import { signIn, signOut, requireUserId } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { DEMO_SUBJECTS } from "@/lib/demo-subjects";
 import { GAME_RULES } from "@/lib/config/game";
-import { rewardsForStudyMinutes } from "@/lib/domain/progress";
+import { rewardsForStudyMinutes, taskCompletionReward } from "@/lib/domain/progress";
 import { refreshDailyMissionsForUser } from "@/lib/domain/missions-service";
 import { createStudyStartToken, StudySessionError, validateServerStudySession, verifyStudyStartToken, type StudySessionErrorCode } from "@/lib/domain/study-session";
 import { withSerializableRetry } from "@/lib/domain/transactions";
@@ -165,11 +165,12 @@ export async function createTask(formData: FormData) {
 export async function completeTask(formData: FormData) {
   const userId = await requireUserId();
   const id = String(formData.get("id") ?? "");
+  const reward = taskCompletionReward();
   const completed = await withSerializableRetry(() => prisma.$transaction(async (tx) => {
     const task = await tx.task.updateMany({ where: { id, userId, status: { not: "COMPLETED" } }, data: { status: "COMPLETED", completedAt: new Date() } });
     if (task.count !== 1) return null;
-    await tx.user.update({ where: { id: userId }, data: { xp: { increment: GAME_RULES.taskCompletionXp }, coins: { increment: GAME_RULES.taskCompletionCoins } } });
-    return applyAcademicPetProgress(tx, userId, GAME_RULES.taskCompletionXp);
+    await tx.user.update({ where: { id: userId }, data: { xp: { increment: reward.xp }, coins: { increment: reward.coins } } });
+    return applyAcademicPetProgress(tx, userId, reward.xp);
   }, { isolationLevel: "Serializable" }));
   if (!completed) return;
   await refreshDailyMissionsForUser(userId);

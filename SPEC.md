@@ -51,6 +51,10 @@ Next.js App Router + TypeScript + React + Tailwind CSS + componentes shadcn/ui +
 
 TypeScript estricto; componentes de servidor por defecto; componentes cliente solo para interacción; entradas externas validadas con Zod; acceso a datos siempre limitado por `userId`; nombres de dominio en inglés y copy visible en español.
 
+## Estado de las reglas de progreso
+
+La Fase 0 define las reglas activas de XP, monedas, niveles, rachas y recompensas en `docs/fase-0-integridad.md`. Las cifras siguen siendo provisionales, pero ya no están sin definir: son el contrato actual del sistema.
+
 ## Pruebas
 
 Vitest para reglas de planificación y progreso. El cierre exige test, lint, typecheck, build y revisión en navegador de escritorio y móvil.
@@ -71,6 +75,7 @@ Vitest para reglas de planificación y progreso. El cierre exige test, lint, typ
 
 ## Preguntas abiertas deliberadas
 
+- La Fase 0 define las reglas activas en `docs/fase-0-integridad.md`; las cifras solo podrán revisarse como una decisión futura documentada.
 - Fórmulas definitivas de XP, nivel, monedas, racha y recompensas.
 - Reglas de redistribución automática para estudio flexible.
 - Catálogo definitivo de tipos, prioridades y dificultad.

@@ -34,6 +34,7 @@ export async function getDashboardData() {
     missions,
     activePet,
     streak: calculateStudyStreak(sessionDates.map((session) => session.startedAt), now, timeZone),
+    timeZone,
     now,
   };
 }

@@ -11,7 +11,7 @@ import { GAME_RULES } from "@/lib/config/game";
 import { getDashboardData } from "@/lib/dashboard-data";
 import { recommendNextTask } from "@/lib/domain/planner";
 import { calculateLevel } from "@/lib/domain/progress";
-import { localDayBounds } from "@/lib/domain/dates";
+import { zonedDayRange } from "@/lib/domain/dates";
 import { formatDate, minutesLabel } from "@/lib/utils";
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ minutes?: string; notice?: string }> }) {
@@ -25,7 +25,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   })), data.now, available);
   const level = calculateLevel(data.user.xp);
   const dailyPercent = (data.todayStudyMinutes / GAME_RULES.dailyStudyTargetMinutes) * 100;
-  const { end: endOfToday } = localDayBounds(data.now);
+  const { end: endOfToday } = zonedDayRange(data.now, data.timeZone);
   const todayTasks = data.tasks.filter((task) => task.dueDate && task.dueDate < endOfToday).slice(0, 5);
 
   return <div className="mx-auto max-w-[1500px] space-y-6 px-5 py-6 sm:px-8 lg:px-10 lg:py-9">
